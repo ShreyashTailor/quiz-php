@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wanderly — Travel & Explore</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#98a4b4;
+      --accent:#ff7a59;
+      --accent-2:#6ad3ff;
+      --glass: rgba(255,255,255,0.04);
+      --radius:16px;
+      --max-width:1100px;
+      --shadow: 0 6px 18px rgba(2,6,23,0.6);
+      color-scheme: dark;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      background: linear-gradient(180deg,#071123 0%, #081425 60%);
+      color:#e6eef6;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      line-height:1.5;
+      padding:40px 20px;
+      display:flex;
+      justify-content:center;
+    }
+    .container{width:100%;max-width:var(--max-width)}
+
+
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{
+      width:54px;height:54px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+      display:flex;align-items:center;justify-content:center;font-weight:800;color:#062034;box-shadow:var(--shadow);
+    }
+    .brand h1{font-size:18px;margin:0}
+    nav{display:flex;gap:18px;align-items:center}
+    nav a{color:var(--muted);text-decoration:none;font-weight:600}
+    nav a.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));padding:10px 14px;border-radius:10px;color:#072732}
+
+    
+    .hero{display:grid;grid-template-columns:1fr 420px;gap:28px;align-items:center;margin-bottom:28px}
+    .hero-card{
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:var(--radius);padding:34px;box-shadow:var(--shadow);
+    }
+    .eyebrow{color:var(--accent);font-weight:700;font-size:13px;margin-bottom:10px}
+    .hero h2{margin:0 0 12px 0;font-size:34px}
+    .hero p{color:var(--muted);margin:0 0 18px}
+    .cta{display:flex;gap:12px}
+    .cta a{display:inline-block;padding:12px 18px;border-radius:12px;text-decoration:none;font-weight:700}
+    .cta a.book{background:linear-gradient(90deg,var(--accent),#ff9b7f);color:#06181a}
+    .cta a.explore{border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+
+  
+    .search{
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      padding:18px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);
+    }
+    .search label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    .search input,.search select{width:100%;padding:12px;border-radius:10px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit;margin-bottom:10px}
+    .search .row{display:flex;gap:10px}
+    .search button{width:100%;padding:12px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));font-weight:700}
+
+    
+    .section{margin:28px 0}
+    .section h3{margin:0 0 14px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:0;overflow:hidden;border:1px solid rgba(255,255,255,0.03)}
+    .card img{width:100%;height:160px;object-fit:cover;display:block}
+    .card .body{padding:14px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(0,0,0,0.25);font-weight:700;font-size:12px}
+    .card h4{margin:8px 0 6px}
+    .card p{margin:0;color:var(--muted);font-size:14px}
+    .price{margin-top:10px;font-weight:800}
+
+    
+    .gallery{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .gallery img{width:100%;height:120px;object-fit:cover;border-radius:10px}
+
+    
+    footer{margin-top:30px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center}
+    footer p{color:var(--muted);margin:0}
+
+    @media (max-width:1000px){
+      .hero{grid-template-columns:1fr 360px}
+      .grid{grid-template-columns:repeat(2,1fr)}
+    }
+    @media (max-width:720px){
+      body{padding:20px}
+      .hero{grid-template-columns:1fr;}
+      nav{display:none}
+      .grid{grid-template-columns:1fr}
+      .gallery{grid-template-columns:repeat(2,1fr)}
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo">W</div>
+        <div>
+          <h1>Wanderly</h1>
+          <div style="font-size:12px;color:var(--muted)">Explore. Dream. Discover.</div>
+        </div>
+      </div>
+      <nav>
+        <a href="#destinations">Destinations</a>
+        <a href="#deals">Deals</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#contact" class="primary">Contact</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-card">
+          <div class="eyebrow">Limited Offer • Save up to 30%</div>
+          <h2>Discover hidden paradises — tailored trips for every traveller</h2>
+          <p>Handpicked destinations, hassle-free booking, 24/7 support. Find your next getaway, whether it's beaches, mountains, or city breaks.</p>
+
+          <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+            <div class="cta">
+              <a href="#deals" class="book">Book Now</a>
+              <a href="#destinations" class="explore">Explore More</a>
+            </div>
+            <div style="margin-left:8px;color:var(--muted);font-size:13px">Popular: Bali • Swiss Alps • Kyoto</div>
+          </div>
+
+          <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
+            <div style="background:var(--glass);padding:10px;border-radius:12px">
+              ✈  24/7 Support
+            </div>
+            <div style="background:var(--glass);padding:10px;border-radius:12px">
+              🏨  Trusted Hotels
+            </div>
+            <div style="background:var(--glass);padding:10px;border-radius:12px">
+              🔒  Secure Payments
+            </div>
+          </div>
+        </div>
+
+        <aside class="search">
+          <label for="where">Where do you want to go?</label>
+          <input id="where" placeholder="City or country" />
+
+          <div class="row">
+            <div style="flex:1">
+              <label for="checkin">Check-in</label>
+              <input id="checkin" placeholder="YYYY-MM-DD" />
+            </div>
+            <div style="flex:1">
+              <label for="checkout">Check-out</label>
+              <input id="checkout" placeholder="YYYY-MM-DD" />
+            </div>
+          </div>
+
+          <label for="guests">Guests</label>
+          <select id="guests">
+            <option>1 guest</option>
+            <option>2 guests</option>
+            <option>3 guests</option>
+            <option>4+ guests</option>
+          </select>
+
+          <button>Search trips</button>
+        </aside>
+      </section>
+
+      <section id="destinations" class="section">
+        <h3>Top Destinations</h3>
+        <div class="grid">
+          <article class="card">
+            <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=abc" alt="Bali beach">
+            <div class="body">
+              <span class="pill">Beach</span>
+              <h4>Bali, Indonesia</h4>
+              <p>Golden beaches, temples, and vibrant culture. 5 days package from only ₹24,999.</p>
+              <div class="price">₹24,999</div>
+            </div>
+          </article>
+
+          <article class="card">
+            <img src="https://images.unsplash.com/photo-1482192505345-5655af888cc4?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=def" alt="Swiss alps">
+            <div class="body">
+              <span class="pill">Mountains</span>
+              <h4>Swiss Alps, Switzerland</h4>
+              <p>Snowy peaks, scenic trains and cosy chalets. 7 days from ₹89,999.</p>
+              <div class="price">₹89,999</div>
+            </div>
+          </article>
+
+          <article class="card">
+            <img src="https://images.unsplash.com/photo-1549692520-acc6669e2f0c?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=ghi" alt="Kyoto">
+            <div class="body">
+              <span class="pill">Culture</span>
+              <h4>Kyoto, Japan</h4>
+              <p>Historic temples, cherry blossoms and refined cuisine. 4 days from ₹41,500.</p>
+              <div class="price">₹41,500</div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="deals" class="section">
+        <h3>Hot Deals</h3>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px;background:linear-gradient(90deg,var(--accent),var(--accent-2));padding:18px;border-radius:12px;color:#031617;box-shadow:var(--shadow)">
+            <h4 style="margin:0 0 8px">Weekend Getaway</h4>
+            <p style="margin:0 0 10px">2 nights stay + breakfast from ₹7,499</p>
+            <a href="#" style="font-weight:800;text-decoration:none;color:#00110f">Book</a>
+          </div>
+
+          <div style="flex:1;min-width:260px;background:var(--card);padding:18px;border-radius:12px;color:inherit;border:1px solid rgba(255,255,255,0.03)">
+            <h4 style="margin:0 0 8px">Family Pack</h4>
+            <p style="margin:0 0 10px">Family-friendly hotels and activities from ₹19,999</p>
+            <a href="#" style="font-weight:800;text-decoration:none;color:var(--accent)">Book</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="gallery" class="section">
+        <h3>Gallery</h3>
+        <div class="gallery">
+          <img src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=jkl" alt="gallery1">
+          <img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=mno" alt="gallery2">
+          <img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=pqr" alt="gallery3">
+          <img src="https://images.unsplash.com/photo-1434433146695-2ce6c1e6b2b9?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=stu" alt="gallery4">
+        </div>
+      </section>
+
+      <section id="contact" class="section">
+        <h3>Contact Us</h3>
+        <div style="display:grid;grid-template-columns:1fr 360px;gap:18px">
+          <div style="background:var(--card);padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)">
+            <p style="color:var(--muted)">Have a question, group booking or custom itinerary? Send us a message and our travel experts will get back within 24 hours.</p>
+            <form>
+              <input placeholder="Your name" style="width:100%;padding:12px;border-radius:10px;margin-bottom:10px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit" />
+              <input placeholder="Email" style="width:100%;padding:12px;border-radius:10px;margin-bottom:10px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit" />
+              <textarea placeholder="Message" style="width:100%;padding:12px;border-radius:10px;margin-bottom:10px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit;min-height:120px"></textarea>
+              <button type="button" style="padding:12px 16px;border-radius:10px;background:linear-gradient(90deg,var(--accent),var(--accent-2));border:0;font-weight:800">Send Message</button>
+            </form>
+          </div>
+
+          <aside style="padding:18px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+            <div style="background:var(--glass);padding:12px;border-radius:12px;width:100%">📞 +91 98765 43210</div>
+            <div style="background:var(--glass);padding:12px;border-radius:12px;width:100%">📧 hello@wanderly.example</div>
+            <div style="background:var(--glass);padding:12px;border-radius:12px;width:100%">📍 Mumbai, India</div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>© 2025 Wanderly. All rights reserved.</p>
+      <p style="color:var(--muted)">Made with ♥ for travellers</p>
+    </footer>
+  </div>
+</body>
+</html>
