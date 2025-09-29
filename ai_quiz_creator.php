@@ -9,7 +9,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Gemini API configuration
-define('GEMINI_API_KEY', '');
+define('GEMINI_API_KEY', $_ENV['api']);
 
 // Try different Gemini models in order of preference (Gemini 1.5 models)
 $available_models = [
