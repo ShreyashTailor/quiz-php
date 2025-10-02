@@ -48,4 +48,10 @@ This project is licensed under the QuizMaster is licensed under the Apache Licen
 
 <h2>💖Like my work?</h2>
 
-For any queries - please contact me at - contact@shreyash-is.a.dev or contact me on discord - shreyash0467. I hope you have a beautiful day ahead!
+<h2>Future ideas for project</h2>
+
+. gemini quiz maker
+. ai powered 
+. pdf uploads
+
+For any queries - please contact me at - contact@shreyash-is.a.dev or contact me on discord - shreyash0467 and daddyishere5538. I hope you have a beautiful day ahead!
