@@ -12,9 +12,9 @@
 
 <h2>Project Screenshots:</h2>
 
-<img src="https://i.ibb.co/GGDGr4n/Screenshot-2025-09-29-143019.png" alt="project-screenshot" width="400" height="400/">
+<img src="https://i.ibb.co/BVRq15Dr/Screenshot-2025-10-02-184503.png" alt="project-screenshot" width="500" height="500/">
 
-<img src="https://i.ibb.co/gZQ6YzQ3/image.png" alt="project-screenshot" width="400" height="400/">
+<img src="https://i.ibb.co/SDG9BzXz/Screenshot-2025-10-02-185303.png" alt="project-screenshot" width="500" height="500/">
 
   
   
