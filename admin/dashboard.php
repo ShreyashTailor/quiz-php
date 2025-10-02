@@ -66,183 +66,268 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
                                        LIMIT 10");
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - QuizMaster</title>
-    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../shadcn-style.css">
 </head>
-<body>
-    <!-- Navigation -->
-    <div class="navbar">
-        <div class="nav-left">
-            <h1><a href="../index.php" style="color: #333; text-decoration: none;">QuizMaster</a></h1>
+<body class="font-sans bg-background text-foreground">
+    <nav class="navigation">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>🎯 QuizMaster Admin</h1>
+            </div>
+            <div class="nav-links">
+                <a href="../index.php" class="btn btn-outline">🏠 Home</a>
+                <a href="../leaderboard.php" class="btn btn-secondary">🏆 Leaderboard</a>
+                <a href="../logout.php" class="btn btn-outline">🚪 Logout</a>
+                <button id="theme-toggle" class="btn btn-outline" aria-label="Toggle theme">🌙</button>
+            </div>
         </div>
-        <div class="nav-center">
-            <span class="admin-badge">👑 Admin Dashboard</span>
-        </div>
-        <div class="nav-right">
-            <span class="greeting-text">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
-            <a href="../logout.php" class="nav-btn logout-btn">Logout</a>
-        </div>
-    </div>
+    </nav>
 
-    <div class="container">
-        <!-- Page Header -->
-        <div class="admin-header">
-            <h2>🛠️ Admin Dashboard</h2>
-            <p>Manage quiz submissions and monitor platform activity</p>
-        </div>
+    <main class="container py-8">
+        <div class="max-w-6xl mx-auto">
+            <!-- Welcome Header -->
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold mb-2">Admin Dashboard</h1>
+                <p class="text-muted-foreground">Welcome back, <?php echo htmlspecialchars($_SESSION['username']); ?>! Manage quiz submissions and monitor platform activity.</p>
+            </div>
 
-        <?php if (isset($success_message)): ?>
-            <div class="success-message">
-                <p>✅ <?php echo $success_message; ?></p>
-            </div>
-        <?php endif; ?>
-
-        <!-- Statistics Cards -->
-        <div class="stats-grid">
-            <div class="stat-card pending">
-                <div class="stat-icon">⏳</div>
-                <div class="stat-value"><?php echo $stats['pending_count']; ?></div>
-                <div class="stat-label">Pending Approval</div>
-            </div>
-            <div class="stat-card approved">
-                <div class="stat-icon">✅</div>
-                <div class="stat-value"><?php echo $stats['approved_count']; ?></div>
-                <div class="stat-label">Approved Quizzes</div>
-            </div>
-            <div class="stat-card rejected">
-                <div class="stat-icon">❌</div>
-                <div class="stat-value"><?php echo $stats['rejected_count']; ?></div>
-                <div class="stat-label">Rejected Quizzes</div>
-            </div>
-            <div class="stat-card users">
-                <div class="stat-icon">👥</div>
-                <div class="stat-value"><?php echo $stats['total_users']; ?></div>
-                <div class="stat-label">Total Users</div>
-            </div>
-            <div class="stat-card attempts">
-                <div class="stat-icon">🎯</div>
-                <div class="stat-value"><?php echo $stats['total_attempts']; ?></div>
-                <div class="stat-label">Quiz Attempts</div>
-            </div>
-        </div>
-
-        <!-- Pending Quizzes Section -->
-        <div class="section">
-            <h3>⏳ Pending Quiz Approvals (<?php echo $stats['pending_count']; ?>)</h3>
-            
-            <?php if (mysqli_num_rows($pending_quizzes) > 0): ?>
-                <div class="pending-quizzes">
-                    <?php while ($quiz = mysqli_fetch_assoc($pending_quizzes)): ?>
-                        <div class="quiz-review-card">
-                            <div class="quiz-info">
-                                <h4><?php echo htmlspecialchars($quiz['title']); ?></h4>
-                                <p class="quiz-description"><?php echo htmlspecialchars($quiz['description']); ?></p>
-                                
-                                <div class="quiz-meta">
-                                    <span class="meta-item">👤 Created by: <strong><?php echo htmlspecialchars($quiz['creator_name']); ?></strong></span>
-                                    <span class="meta-item">❓ Questions: <strong><?php echo $quiz['question_count']; ?></strong></span>
-                                    <span class="meta-item">📅 Submitted: <strong><?php echo date('M j, Y g:i A', strtotime($quiz['created_at'])); ?></strong></span>
-                                </div>
-                                
-                                <div class="quiz-actions">
-                                    <a href="preview_quiz.php?id=<?php echo $quiz['id']; ?>" class="btn-secondary" target="_blank">👀 Preview Quiz</a>
-                                </div>
-                            </div>
-                            
-                            <div class="approval-actions">
-                                <form method="post" class="approval-form">
-                                    <input type="hidden" name="quiz_id" value="<?php echo $quiz['id']; ?>">
-                                    
-                                    <div class="form-group">
-                                        <label>Admin Notes:</label>
-                                        <textarea name="admin_notes" placeholder="Add notes about your decision (optional)..."></textarea>
-                                    </div>
-                                    
-                                    <div class="action-buttons">
-                                        <button type="submit" name="approve_quiz" class="btn-approve" 
-                                                onclick="return confirm('Are you sure you want to approve this quiz?')">
-                                            ✅ Approve Quiz
-                                        </button>
-                                        <button type="submit" name="reject_quiz" class="btn-reject"
-                                                onclick="return confirm('Are you sure you want to reject this quiz? This action cannot be undone.')">
-                                            ❌ Reject Quiz
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    <?php endwhile; ?>
-                </div>
-            <?php else: ?>
-                <div class="no-pending">
-                    <div class="no-data">
-                        <p>🎉 Great! No quizzes pending approval.</p>
-                        <p>All submitted quizzes have been reviewed.</p>
+            <?php if (isset($success_message)): ?>
+                <div class="alert alert-success mb-6">
+                    <div class="flex items-center">
+                        <span class="text-lg mr-2">✅</span>
+                        <span><?php echo $success_message; ?></span>
                     </div>
                 </div>
             <?php endif; ?>
-        </div>
 
-        <!-- Recent Activity -->
-        <div class="section">
-            <h3>📊 Recent Admin Activity</h3>
-            
-            <?php if (mysqli_num_rows($recent_activity) > 0): ?>
-                <div class="activity-list">
-                    <?php while ($activity = mysqli_fetch_assoc($recent_activity)): ?>
-                        <div class="activity-item">
-                            <div class="activity-icon">
-                                <?php echo ($activity['status'] === 'approved') ? '✅' : '❌'; ?>
-                            </div>
-                            <div class="activity-content">
-                                <h4><?php echo htmlspecialchars($activity['title']); ?></h4>
-                                <p>
-                                    <?php echo ucfirst($activity['status']); ?> by 
-                                    <strong><?php echo htmlspecialchars($activity['approver_name'] ?? 'Unknown'); ?></strong>
-                                    on <?php echo date('M j, Y g:i A', strtotime($activity['approved_at'])); ?>
-                                </p>
-                                <?php if ($activity['admin_notes']): ?>
-                                    <p class="admin-notes">📝 Notes: <?php echo htmlspecialchars($activity['admin_notes']); ?></p>
-                                <?php endif; ?>
-                            </div>
-                            <div class="activity-meta">
-                                <span class="status-badge <?php echo $activity['status']; ?>">
-                                    <?php echo ucfirst($activity['status']); ?>
-                                </span>
+            <!-- Statistics Cards -->
+            <div class="grid grid-cols-5 gap-6 mb-8">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-3xl">⏳</div>
+                            <div>
+                                <p class="text-sm text-muted-foreground">Pending</p>
+                                <p class="text-2xl font-bold"><?php echo $stats['pending_count']; ?></p>
                             </div>
                         </div>
-                    <?php endwhile; ?>
+                    </div>
                 </div>
-            <?php else: ?>
-                <div class="no-data">
-                    <p>No recent admin activity.</p>
+                
+                <div class="card">
+                    <div class="card-content">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-3xl">✅</div>
+                            <div>
+                                <p class="text-sm text-muted-foreground">Approved</p>
+                                <p class="text-2xl font-bold"><?php echo $stats['approved_count']; ?></p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            <?php endif; ?>
-        </div>
+                
+                <div class="card">
+                    <div class="card-content">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-3xl">❌</div>
+                            <div>
+                                <p class="text-sm text-muted-foreground">Rejected</p>
+                                <p class="text-2xl font-bold"><?php echo $stats['rejected_count']; ?></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-content">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-3xl">👥</div>
+                            <div>
+                                <p class="text-sm text-muted-foreground">Users</p>
+                                <p class="text-2xl font-bold"><?php echo $stats['total_users']; ?></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-content">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-3xl">🎯</div>
+                            <div>
+                                <p class="text-sm text-muted-foreground">Attempts</p>
+                                <p class="text-2xl font-bold"><?php echo $stats['total_attempts']; ?></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Quick Actions -->
-        <div class="section">
-            <h3>⚡ Quick Actions</h3>
-            <div class="quick-actions">
-                <a href="../create_quiz.php" class="action-card">
-                    <div class="action-icon">➕</div>
-                    <h4>Create Quiz</h4>
-                    <p>Create a new quiz as admin</p>
+            <!-- Quick Actions -->
+            <div class="grid grid-cols-4 gap-6 mb-8">
+                <a href="../create_quiz.php" class="card hover:scale-105 transition-transform">
+                    <div class="card-content text-center">
+                        <div class="text-4xl mb-3">➕</div>
+                        <h3 class="font-semibold mb-2">Create Quiz</h3>
+                        <p class="text-sm text-muted-foreground">Create a new quiz as admin</p>
+                    </div>
                 </a>
-                <a href="../leaderboard.php" class="action-card">
-                    <div class="action-icon">🏆</div>
-                    <h4>View Leaderboard</h4>
-                    <p>Check quiz performance</p>
+                
+                <a href="manage_quizzes.php" class="card hover:scale-105 transition-transform">
+                    <div class="card-content text-center">
+                        <div class="text-4xl mb-3">📝</div>
+                        <h3 class="font-semibold mb-2">Manage Quizzes</h3>
+                        <p class="text-sm text-muted-foreground">Edit, delete and manage quizzes</p>
+                    </div>
                 </a>
-                <a href="../index.php" class="action-card">
-                    <div class="action-icon">🏠</div>
-                    <h4>Home Page</h4>
-                    <p>Go to main site</p>
+                
+                <a href="../leaderboard.php" class="card hover:scale-105 transition-transform">
+                    <div class="card-content text-center">
+                        <div class="text-4xl mb-3">🏆</div>
+                        <h3 class="font-semibold mb-2">Leaderboard</h3>
+                        <p class="text-sm text-muted-foreground">Check quiz performance</p>
+                    </div>
+                </a>
+                
+                <a href="manage_users.php" class="card hover:scale-105 transition-transform">
+                    <div class="card-content text-center">
+                        <div class="text-4xl mb-3">👥</div>
+                        <h3 class="font-semibold mb-2">Manage Users</h3>
+                        <p class="text-sm text-muted-foreground">View and manage user accounts</p>
+                    </div>
                 </a>
             </div>
+
+            <!-- Pending Quizzes Section -->
+            <div class="card mb-8">
+                <div class="card-header">
+                    <h3 class="card-title">⏳ Pending Quiz Approvals</h3>
+                    <p class="card-description"><?php echo $stats['pending_count']; ?> quiz(es) awaiting review</p>
+                </div>
+                <div class="card-content">
+                    <?php if (mysqli_num_rows($pending_quizzes) > 0): ?>
+                        <div class="space-y-6">
+                            <?php while ($quiz = mysqli_fetch_assoc($pending_quizzes)): ?>
+                                <div class="border rounded-lg p-6">
+                                    <div class="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <h4 class="font-semibold text-lg mb-2"><?php echo htmlspecialchars($quiz['title']); ?></h4>
+                                            <p class="text-muted-foreground mb-4"><?php echo htmlspecialchars($quiz['description']); ?></p>
+                                            
+                                            <div class="space-y-2 text-sm">
+                                                <div class="flex items-center space-x-2">
+                                                    <span>👤</span>
+                                                    <span>Created by: <strong><?php echo htmlspecialchars($quiz['creator_name']); ?></strong></span>
+                                                </div>
+                                                <div class="flex items-center space-x-2">
+                                                    <span>❓</span>
+                                                    <span>Questions: <strong><?php echo $quiz['question_count']; ?></strong></span>
+                                                </div>
+                                                <div class="flex items-center space-x-2">
+                                                    <span>📅</span>
+                                                    <span>Submitted: <strong><?php echo date('M j, Y g:i A', strtotime($quiz['created_at'])); ?></strong></span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="mt-4">
+                                                <a href="preview_quiz.php?id=<?php echo $quiz['id']; ?>" 
+                                                   class="btn btn-outline" target="_blank">👀 Preview Quiz</a>
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <form method="post" class="space-y-4">
+                                                <input type="hidden" name="quiz_id" value="<?php echo $quiz['id']; ?>">
+                                                
+                                                <div class="form-group">
+                                                    <label class="label">Admin Notes:</label>
+                                                    <textarea name="admin_notes" class="textarea" rows="3" 
+                                                              placeholder="Add notes about your decision (optional)..."></textarea>
+                                                </div>
+                                                
+                                                <div class="flex space-x-3">
+                                                    <button type="submit" name="approve_quiz" class="btn btn-primary flex-1"
+                                                            onclick="return confirm('Are you sure you want to approve this quiz?')">
+                                                        ✅ Approve
+                                                    </button>
+                                                    <button type="submit" name="reject_quiz" class="btn btn-destructive flex-1"
+                                                            onclick="return confirm('Are you sure you want to reject this quiz?')">
+                                                        ❌ Reject
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endwhile; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center p-6">
+                            <div class="text-6xl mb-4">🎉</div>
+                            <h3 class="text-lg font-semibold mb-2">All Caught Up!</h3>
+                            <p class="text-muted-foreground">No quizzes pending approval. All submitted quizzes have been reviewed.</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📊 Recent Admin Activity</h3>
+                    <p class="card-description">Latest review actions and decisions</p>
+                </div>
+                <div class="card-content">
+                    <?php if (mysqli_num_rows($recent_activity) > 0): ?>
+                        <div class="space-y-4">
+                            <?php while ($activity = mysqli_fetch_assoc($recent_activity)): ?>
+                                <div class="flex items-start space-x-4 p-4 border rounded-lg">
+                                    <div class="text-2xl">
+                                        <?php echo ($activity['status'] === 'approved') ? '✅' : '❌'; ?>
+                                    </div>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold"><?php echo htmlspecialchars($activity['title']); ?></h4>
+                                        <p class="text-sm text-muted-foreground">
+                                            <?php echo ucfirst($activity['status']); ?> by 
+                                            <strong><?php echo htmlspecialchars($activity['approver_name'] ?? 'Unknown'); ?></strong>
+                                            on <?php echo date('M j, Y g:i A', strtotime($activity['approved_at'])); ?>
+                                        </p>
+                                        <?php if ($activity['admin_notes']): ?>
+                                            <p class="text-sm mt-2 p-2 bg-muted rounded">
+                                                📝 Notes: <?php echo htmlspecialchars($activity['admin_notes']); ?>
+                                            </p>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div>
+                                        <span class="badge <?php echo $activity['status'] === 'approved' ? 'badge-default' : 'badge-destructive'; ?>">
+                                            <?php echo ucfirst($activity['status']); ?>
+                                        </span>
+                                    </div>
+                                </div>
+                            <?php endwhile; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center p-6">
+                            <div class="text-6xl mb-4">📊</div>
+                            <h3 class="text-lg font-semibold mb-2">No Recent Activity</h3>
+                            <p class="text-muted-foreground">Admin review activity will appear here.</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
-    </div>
+    </main>
+
+    <script src="../dark-mode.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Admin dashboard loaded with Shadcn UI!');
+        });
+    </script>
 </body>
 </html>

@@ -49,131 +49,200 @@ $questions_result = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id =
 $question_count = mysqli_num_rows($questions_result);
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Add Questions - <?php echo htmlspecialchars($quiz['title']); ?></title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Questions - <?php echo htmlspecialchars($quiz['title']); ?></title>
+    <link rel="stylesheet" href="shadcn-style.css">
 </head>
-<body>
-  <!-- Navigation -->
-  <div class="navbar">
-    <div class="nav-left">
-      <h1><a href="index.php" style="color: #333; text-decoration: none;">QuizMaster</a></h1>
-    </div>
-    <div class="nav-right">
-      <?php if (isset($_SESSION['user_id'])): ?>
-        <span class="greeting-text">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
-        <a href="logout.php" class="nav-btn logout-btn">Logout</a>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <div class="container">
-    <div class="quiz-creation-header">
-      <h2>📝 Adding Questions to: <span class="quiz-title"><?php echo htmlspecialchars($quiz['title']); ?></span></h2>
-      <p class="quiz-description"><?php echo htmlspecialchars($quiz['description']); ?></p>
-      <div class="question-counter">
-        <span class="counter-badge">Questions Added: <?php echo $question_count; ?></span>
-        <?php if ($quiz['status'] === 'pending'): ?>
-          <span class="status-badge pending">⏳ Pending Approval</span>
-        <?php elseif ($quiz['status'] === 'approved'): ?>
-          <span class="status-badge approved">✅ Approved</span>
-        <?php endif; ?>
-      </div>
-    </div>
-
-    <?php if (isset($success_message)): ?>
-      <div class="success-message">
-        <p>✅ <?php echo $success_message; ?></p>
-      </div>
-    <?php endif; ?>
-
-    <!-- Add Question Form -->
-    <div class="question-form-section">
-      <h3>➕ Add New Question</h3>
-      <form method="post" class="question-form">
-        <div class="form-group">
-          <label>Question:</label>
-          <textarea name="question" required placeholder="Enter your question here..."></textarea>
-        </div>
-        
-        <div class="options-grid">
-          <div class="option-group">
-            <label>Option A:</label>
-            <input type="text" name="option_a" required placeholder="Enter option A">
-          </div>
-          <div class="option-group">
-            <label>Option B:</label>
-            <input type="text" name="option_b" required placeholder="Enter option B">
-          </div>
-          <div class="option-group">
-            <label>Option C:</label>
-            <input type="text" name="option_c" required placeholder="Enter option C">
-          </div>
-          <div class="option-group">
-            <label>Option D:</label>
-            <input type="text" name="option_d" required placeholder="Enter option D">
-          </div>
-        </div>
-        
-        <div class="form-group">
-          <label>Correct Option:</label>
-          <select name="correct" required>
-            <option value="">Select correct answer</option>
-            <option value="A">A</option>
-            <option value="B">B</option>
-            <option value="C">C</option>
-            <option value="D">D</option>
-          </select>
-        </div>
-        
-        <button type="submit" class="btn-primary">➕ Add Question</button>
-      </form>
-    </div>
-
-    <!-- Existing Questions Preview -->
-    <?php if ($question_count > 0): ?>
-      <div class="questions-preview">
-        <h3>📋 Questions Added (<?php echo $question_count; ?>)</h3>
-        <div class="questions-list">
-          <?php 
-          $q_num = 1;
-          mysqli_data_seek($questions_result, 0);
-          while ($q = mysqli_fetch_assoc($questions_result)): 
-          ?>
-            <div class="question-preview">
-              <h4>Q<?php echo $q_num; ?>: <?php echo htmlspecialchars($q['question']); ?></h4>
-              <div class="options-preview">
-                <span class="option <?php echo ($q['correct_option'] === 'A') ? 'correct' : ''; ?>">A) <?php echo htmlspecialchars($q['option_a']); ?></span>
-                <span class="option <?php echo ($q['correct_option'] === 'B') ? 'correct' : ''; ?>">B) <?php echo htmlspecialchars($q['option_b']); ?></span>
-                <span class="option <?php echo ($q['correct_option'] === 'C') ? 'correct' : ''; ?>">C) <?php echo htmlspecialchars($q['option_c']); ?></span>
-                <span class="option <?php echo ($q['correct_option'] === 'D') ? 'correct' : ''; ?>">D) <?php echo htmlspecialchars($q['option_d']); ?></span>
-              </div>
+<body class="font-sans bg-background text-foreground">
+    <nav class="navigation">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>🎯 QuizMaster</h1>
             </div>
-          <?php 
-          $q_num++;
-          endwhile; 
-          ?>
+            <div class="nav-links">
+                <a href="index.php" class="btn btn-outline">🏠 Home</a>
+                <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <a href="logout.php" class="btn btn-outline">🚪 Logout</a>
+                <button id="theme-toggle" class="btn btn-outline" aria-label="Toggle theme">🌙</button>
+            </div>
         </div>
-      </div>
-    <?php endif; ?>
+    </nav>
 
-    <!-- Action Buttons -->
-    <div class="action-section">
-      <?php if ($question_count >= 1): ?>
-        <form method="post" style="display: inline;">
-          <button type="submit" name="finish_quiz" class="btn-success">✅ Finish Quiz Creation</button>
-        </form>
-      <?php else: ?>
-        <p class="requirement-note">⚠️ Please add at least 1 question before finishing the quiz.</p>
-      <?php endif; ?>
-      
-      <?php if ($quiz['status'] === 'approved'): ?>
-        <a href="quiz.php?id=<?php echo $quiz_id; ?>" class="btn-secondary">👀 Preview Quiz</a>
-      <?php endif; ?>
-      
-      <a href="index.php" class="btn-tertiary">🏠 Back to Home</a>
-    </div>
-  </div>
+    <main class="container py-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Quiz Header -->
+            <div class="card mb-8">
+                <div class="card-header text-center">
+                    <div class="flex items-center justify-center space-x-2 mb-2">
+                        <span class="text-2xl">📝</span>
+                        <h1 class="text-2xl font-bold">Adding Questions to:</h1>
+                    </div>
+                    <h2 class="text-xl text-primary font-semibold"><?php echo htmlspecialchars($quiz['title']); ?></h2>
+                    <p class="text-muted-foreground mt-2"><?php echo htmlspecialchars($quiz['description']); ?></p>
+                </div>
+                <div class="card-content">
+                    <div class="flex justify-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <span class="badge badge-default">Questions Added: <?php echo $question_count; ?></span>
+                        </div>
+                        <?php if ($quiz['status'] === 'pending'): ?>
+                            <span class="badge badge-secondary">⏳ Pending Approval</span>
+                        <?php elseif ($quiz['status'] === 'approved'): ?>
+                            <span class="badge badge-default">✅ Approved</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <?php if (isset($success_message)): ?>
+                <div class="alert alert-success mb-6">
+                    <div class="flex items-center">
+                        <span class="text-lg mr-2">✅</span>
+                        <span><?php echo $success_message; ?></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!-- Add Question Form -->
+            <div class="card mb-8">
+                <div class="card-header">
+                    <h3 class="card-title">➕ Add New Question</h3>
+                    <p class="card-description">Create a multiple choice question with 4 options</p>
+                </div>
+                <div class="card-content">
+                    <form method="post" class="space-y-6">
+                        <div class="form-group">
+                            <label class="label">Question</label>
+                            <textarea name="question" class="textarea" rows="3" required 
+                                      placeholder="Enter your question here..."></textarea>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="form-group">
+                                <label class="label">Option A</label>
+                                <input type="text" name="option_a" class="input" required 
+                                       placeholder="Enter option A">
+                            </div>
+                            <div class="form-group">
+                                <label class="label">Option B</label>
+                                <input type="text" name="option_b" class="input" required 
+                                       placeholder="Enter option B">
+                            </div>
+                            <div class="form-group">
+                                <label class="label">Option C</label>
+                                <input type="text" name="option_c" class="input" required 
+                                       placeholder="Enter option C">
+                            </div>
+                            <div class="form-group">
+                                <label class="label">Option D</label>
+                                <input type="text" name="option_d" class="input" required 
+                                       placeholder="Enter option D">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="label">Correct Answer</label>
+                            <select name="correct" class="select" required>
+                                <option value="">Select correct answer</option>
+                                <option value="A">Option A</option>
+                                <option value="B">Option B</option>
+                                <option value="C">Option C</option>
+                                <option value="D">Option D</option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-full">
+                            ➕ Add Question
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Existing Questions Preview -->
+            <?php if ($question_count > 0): ?>
+                <div class="card mb-8">
+                    <div class="card-header">
+                        <h3 class="card-title">📋 Questions Added</h3>
+                        <p class="card-description"><?php echo $question_count; ?> question(s) created so far</p>
+                    </div>
+                    <div class="card-content">
+                        <div class="space-y-6">
+                            <?php 
+                            $q_num = 1;
+                            mysqli_data_seek($questions_result, 0);
+                            while ($q = mysqli_fetch_assoc($questions_result)): 
+                            ?>
+                                <div class="border rounded-lg p-4">
+                                    <h4 class="font-semibold mb-3">Q<?php echo $q_num; ?>: <?php echo htmlspecialchars($q['question']); ?></h4>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'A') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                            <span class="font-medium">A)</span> <?php echo htmlspecialchars($q['option_a']); ?>
+                                            <?php if ($q['correct_option'] === 'A'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
+                                        </div>
+                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'B') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                            <span class="font-medium">B)</span> <?php echo htmlspecialchars($q['option_b']); ?>
+                                            <?php if ($q['correct_option'] === 'B'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
+                                        </div>
+                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'C') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                            <span class="font-medium">C)</span> <?php echo htmlspecialchars($q['option_c']); ?>
+                                            <?php if ($q['correct_option'] === 'C'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
+                                        </div>
+                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'D') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                            <span class="font-medium">D)</span> <?php echo htmlspecialchars($q['option_d']); ?>
+                                            <?php if ($q['correct_option'] === 'D'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php 
+                            $q_num++;
+                            endwhile; 
+                            ?>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!-- Action Buttons -->
+            <div class="card">
+                <div class="card-content">
+                    <div class="flex flex-col space-y-4">
+                        <?php if ($question_count >= 1): ?>
+                            <form method="post">
+                                <button type="submit" name="finish_quiz" class="btn btn-primary w-full">
+                                    ✅ Finish Quiz Creation
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <div class="alert alert-warning">
+                                <p>⚠️ Please add at least 1 question before finishing the quiz.</p>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <div class="flex space-x-4">
+                            <?php if ($quiz['status'] === 'approved'): ?>
+                                <a href="quiz.php?id=<?php echo $quiz_id; ?>" class="btn btn-secondary flex-1">
+                                    👀 Preview Quiz
+                                </a>
+                            <?php endif; ?>
+                            
+                            <a href="index.php" class="btn btn-outline flex-1">
+                                🏠 Back to Home
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="dark-mode.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Add questions page loaded with Shadcn UI!');
+        });
+    </script>
 </body>
 </html>

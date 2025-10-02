@@ -429,98 +429,119 @@ Requirements:
 }
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Quiz Creator - QuizMaster</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="shadcn-style.css">
 </head>
 <body>
     <!-- Navigation -->
-    <div class="navbar">
-        <div class="nav-left">
-            <h1><a href="index.php" style="color: #333; text-decoration: none;">QuizMaster</a></h1>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.php" class="nav-brand">QuizMaster</a>
+            <div class="nav-links">
+                <span class="nav-link">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <a href="logout.php" class="btn btn-outline btn-sm">Logout</a>
+            </div>
         </div>
-        <div class="nav-right">
-            <span class="greeting-text">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
-            <a href="logout.php" class="nav-btn logout-btn">Logout</a>
-        </div>
-    </div>
+    </nav>
 
-    <div class="container">
-        <?php if ($processing): ?>
+    <main class="main-content">
+        <div class="container"><?php if ($processing): ?>
             <!-- Processing Screen -->
-            <div class="processing-screen">
-                <div class="processing-animation">
-                    <div class="ai-brain">🤖</div>
-                    <div class="processing-dots">
-                        <span></span><span></span><span></span>
+            <div class="card text-center">
+                <div class="card-content p-6">
+                    <div class="processing-animation">
+                        <div class="ai-brain">🤖</div>
+                        <div class="processing-dots">
+                            <span></span><span></span><span></span>
+                        </div>
                     </div>
-                </div>
-                <h2>🧠 AI is Creating Your Quiz...</h2>
-                <p>Please wait while Gemini AI analyzes your PDF and generates quiz questions.</p>
-                <div class="processing-steps">
-                    <div class="step active">📄 Reading PDF content</div>
-                    <div class="step active">🤖 AI analyzing content</div>
-                    <div class="step active">❓ Generating questions</div>
-                    <div class="step">✅ Finalizing quiz</div>
+                    <h2 class="text-2xl font-bold mb-4">🧠 AI is Creating Your Quiz...</h2>
+                    <p class="text-muted-foreground mb-6">Please wait while Gemini AI analyzes your PDF and generates quiz questions.</p>
+                    <div class="space-y-2">
+                        <div class="flex items-center text-sm">
+                            <span class="mr-2">📄</span> Reading PDF content
+                        </div>
+                        <div class="flex items-center text-sm">
+                            <span class="mr-2">🤖</span> AI analyzing content
+                        </div>
+                        <div class="flex items-center text-sm">
+                            <span class="mr-2">❓</span> Generating questions
+                        </div>
+                        <div class="flex items-center text-sm text-muted-foreground">
+                            <span class="mr-2">✅</span> Finalizing quiz
+                        </div>
+                    </div>
                 </div>
             </div>
         <?php else: ?>
             <!-- Main Form -->
-            <div class="ai-creator-header">
-                <h2>🤖 Gemini AI Quiz Creator</h2>
-                <p>Upload a PDF document and let AI create engaging quiz questions automatically</p>
+            <div class="ai-creator-header text-center mb-6">
+                <h2 class="text-2xl font-bold mb-2">🤖 Gemini AI Quiz Creator</h2>
+                <p class="text-muted-foreground">Upload a PDF document and let AI create engaging quiz questions automatically</p>
             </div>
 
             <?php if ($error_message): ?>
-                <div class="error-message">
+                <div class="alert alert-destructive mb-6">
                     <p>❌ <?php echo htmlspecialchars($error_message); ?></p>
                 </div>
             <?php endif; ?>
 
             <?php if ($debug_mode && !empty($debug_logs)): ?>
-                <div class="debug-info">
-                    <h3>🔧 Debug Information</h3>
-                    <div class="debug-logs">
-                        <?php foreach ($debug_logs as $log): ?>
-                            <div class="debug-log">✓ <?php echo htmlspecialchars($log); ?></div>
-                        <?php endforeach; ?>
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <h3 class="card-title">🔧 Debug Information</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="space-y-1 text-sm font-mono">
+                            <?php foreach ($debug_logs as $log): ?>
+                                <div class="text-muted-foreground">✓ <?php echo htmlspecialchars($log); ?></div>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
                 </div>
             <?php endif; ?>
 
-            <div class="ai-form-container">
-                <form method="post" enctype="multipart/form-data" class="ai-quiz-form">
-                    <!-- Quiz Details -->
-                    <div class="form-section">
-                        <h3>📝 Quiz Information</h3>
-                        
+            <form method="post" enctype="multipart/form-data" class="space-y-6">
+                <!-- Quiz Details -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">📝 Quiz Information</h3>
+                    </div>
+                    <div class="card-content">
                         <div class="form-group">
-                            <label>Quiz Title:</label>
-                            <input type="text" name="quiz_title" required 
+                            <label class="label">Quiz Title:</label>
+                            <input type="text" name="quiz_title" class="input" required 
                                    placeholder="e.g., Biology Chapter 5 Quiz" 
                                    value="<?php echo isset($_POST['quiz_title']) ? htmlspecialchars($_POST['quiz_title']) : ''; ?>">
                         </div>
                     </div>
+                </div>
 
-                    <!-- PDF Upload -->
-                    <div class="form-section">
-                        <h3>📄 Upload PDF Document</h3>
-                        
+                <!-- PDF Upload -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">📄 Upload PDF Document</h3>
+                    </div>
+                    <div class="card-content">
                         <div class="upload-area">
-                            <input type="file" name="pdf_file" id="pdf_file" accept=".pdf" required>
-                            <label for="pdf_file" class="upload-label">
-                                <div class="upload-icon">📄</div>
+                            <input type="file" name="pdf_file" id="pdf_file" accept=".pdf" required class="hidden">
+                            <label for="pdf_file" class="cursor-pointer">
+                                <div class="text-4xl mb-4">📄</div>
                                 <div class="upload-text">
                                     <strong>Click to upload PDF</strong>
-                                    <span>or drag and drop</span>
+                                    <span class="block text-sm text-muted-foreground">or drag and drop</span>
                                 </div>
-                                <div class="upload-requirements">
+                                <div class="text-sm text-muted-foreground mt-2">
                                     PDF files only • Max 10MB
                                 </div>
                             </label>
                         </div>
                     </div>
+                </div>
 
                     <!-- AI Settings -->
                     <div class="form-section">
@@ -603,8 +624,10 @@ Requirements:
             </div>
         <?php endif; ?>
     </div>
+  </main>
 
-    <script>
+  <script src="dark-mode.js"></script>
+  <script>
         // File upload preview
         document.getElementById('pdf_file').addEventListener('change', function(e) {
             const file = e.target.files[0];
