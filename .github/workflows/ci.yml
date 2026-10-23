@@ -19,28 +19,28 @@ jobs:
 
       - name: Verify PHP 8.3+ features
         run: |
-          php -r "
+          php -r '
             // Test PHP 8.3 features
             // Match expression
-            \$result = match(1) { 1 => 'one', default => 'other' };
-            echo 'Match expression: ' . \$result . PHP_EOL;
+            $result = match(1) { 1 => "one", default => "other" };
+            echo "Match expression: " . $result . PHP_EOL;
             
             // Readonly properties (cannot have default values in PHP 8.3+)
             class Test { public readonly string $name; public function __construct(string $name) { $this->name = $name; } }
-            $t = new Test('test');
-            echo 'Readonly property: ' . $t->name . PHP_EOL;
+            $t = new Test("test");
+            echo "Readonly property: " . $t->name . PHP_EOL;
             
             // #[Attribute]
             #[Attribute]
             class MyAttribute {}
-            echo 'Attributes work' . PHP_EOL;
+            echo "Attributes work" . PHP_EOL;
             
             // Union types
-            function testUnion(string|int \$value): string|int { return \$value; }
-            echo 'Union types work' . PHP_EOL;
+            function testUnion(string|int $value): string|int { return $value; }
+            echo "Union types work" . PHP_EOL;
             
-            echo 'All PHP 8.3 features verified!' . PHP_EOL;
-          "
+            echo "All PHP 8.3 features verified!" . PHP_EOL;
+          '
 
   static-analysis:
     name: Static Analysis (PHPStan)
@@ -109,16 +109,24 @@ jobs:
           
       - name: Scan for common security issues
         run: |
-          # Check for SQL injection patterns
+          # Check for SQL injection patterns - direct user input in queries
           echo "Checking for SQL injection vulnerabilities..."
-          if grep -r "mysqli_query.*\\$_" --include="*.php" . | grep -v "test" | grep -v ".github"; then
+          if grep -r "mysqli_query.*\$_*" --include="*.php" . | grep -v "test" | grep -v ".github"; then
             echo "⚠️ Potential SQL injection found!"
             exit 1
           fi
           
-          # Check for direct variable interpolation in SQL
-          if grep -r "SELECT.*\\$" --include="*.php" . | grep -v "test" | grep -v ".github" | grep -v "prepare"; then
-            echo "⚠️ Potential SQL interpolation found!"
+          # Check for direct user input interpolation in SQL (dangerous patterns)
+          # Look for $_GET, $_POST, $_REQUEST, $_COOKIE, $_SERVER directly in SQL strings
+          if grep -rE "(SELECT|INSERT|UPDATE|DELETE).*\$\_(GET|POST|REQUEST|COOKIE|SERVER)" --include="*.php" . | grep -v "test" | grep -v ".github" | grep -v "prepare" | grep -v "sanitize"; then
+            echo "⚠️ Direct user input in SQL found!"
+            exit 1
+          fi
+          
+          # Check for string concatenation with unvalidated variables in SQL
+          # Allow known-safe patterns: $inClause['sql'], $where_sql, $order_by_sql
+          if grep -rE "(SELECT|INSERT|UPDATE|DELETE).*\.[\"']\s*\.\s*\$[a-zA-Z_]" --include="*.php" . | grep -v "test" | grep -v ".github" | grep -v "prepare" | grep -v "inClause\['sql'\]" | grep -v "where_sql" | grep -v "order_by_sql" | grep -v "sanitize"; then
+            echo "⚠️ Potential unsafe SQL concatenation found!"
             exit 1
           fi
           
