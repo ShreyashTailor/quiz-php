@@ -1,29 +1,53 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit;
-}
+initSecureSession();
+setSecurityHeaders();
 
-if ($_POST) {
-    $title = mysqli_real_escape_string($conn, $_POST['title']);
-    $desc = mysqli_real_escape_string($conn, $_POST['desc']);
-    $created_by = $_SESSION['user_id'];
-    $creator_name = mysqli_real_escape_string($conn, $_SESSION['username']);
-    
-    // Set status based on user role
-    $status = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') ? 'approved' : 'pending';
+requireLogin();
 
-    mysqli_query($conn, "INSERT INTO quizzes (title, description, created_by, creator_name, status) 
-                        VALUES ('$title','$desc','$created_by','$creator_name','$status')");
+$db = db();
+$success_message = '';
+$error_message = '';
 
-    $quiz_id = mysqli_insert_id($conn);
-
-    header("Location: add_questions.php?quiz_id=$quiz_id");
-    exit;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        $error_message = 'Invalid security token. Please refresh the page and try again.';
+        logSecurityEvent('csrf_validation_failed', "Create quiz attempt", 'warning');
+    } else {
+        $title = sanitizeString($_POST['title'] ?? '', 255);
+        $desc = sanitizeString($_POST['desc'] ?? '', 2000);
+        $created_by = getCurrentUserId();
+        $creator_name = sanitizeString(getCurrentUsername() ?? '', 100);
+        
+        // Validate input
+        if (empty($title)) {
+            $error_message = 'Quiz title is required.';
+        } elseif (strlen($title) < 3) {
+            $error_message = 'Quiz title must be at least 3 characters.';
+        } else {
+            // Set status based on user role
+            $status = (getCurrentUserRole() === 'admin') ? 'approved' : 'pending';
+            
+            // Insert quiz using prepared statement
+            $result = $db->executeNonQuery(
+                "INSERT INTO quizzes (title, description, created_by, creator_name, status) 
+                 VALUES (?, ?, ?, ?, ?)",
+                [$title, $desc, $created_by, $creator_name, $status],
+                'ssiss'
+            );
+            
+            if ($result > 0) {
+                $quiz_id = $db->getLastInsertId();
+                logSecurityEvent('quiz_created', "Quiz ID: $quiz_id, Title: $title, Status: $status");
+                header("Location: add_questions.php?quiz_id=$quiz_id");
+                exit;
+            } else {
+                $error_message = 'Failed to create quiz. Please try again.';
+                logSecurityEvent('quiz_creation_failed', "Error: " . $db->getLastError(), 'error');
+            }
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -42,7 +66,7 @@ if ($_POST) {
             </div>
             <div class="nav-links">
                 <a href="index.php" class="btn btn-outline">🏠 Home</a>
-                <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>!</span>
                 <a href="logout.php" class="btn btn-outline">🚪 Logout</a>
                 <button id="theme-toggle" class="btn btn-outline" aria-label="Toggle theme">🌙</button>
             </div>
@@ -57,6 +81,18 @@ if ($_POST) {
                 <p class="text-muted-foreground text-lg">Choose how you'd like to create your quiz</p>
             </div>
 
+            <?php if ($error_message): ?>
+                <div class="alert alert-destructive mb-6">
+                    <p>❌ <?php echo htmlspecialchars($error_message); ?></p>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($success_message): ?>
+                <div class="alert alert-success mb-6">
+                    <p>✅ <?php echo htmlspecialchars($success_message); ?></p>
+                </div>
+            <?php endif; ?>
+
             <!-- Quiz Creation Options -->
             <div class="grid grid-cols-2 gap-8 mb-8">
                 <!-- Manual Quiz Creation -->
@@ -68,16 +104,19 @@ if ($_POST) {
                     </div>
                     <div class="card-content">
                         <form method="post" class="space-y-4">
+                            <?= csrfField() ?>
                             <div class="form-group">
                                 <label class="label">Quiz Title</label>
                                 <input type="text" name="title" class="input" required 
-                                       placeholder="Enter an engaging quiz title...">
+                                       placeholder="Enter an engaging quiz title..."
+                                       maxlength="255" minlength="3">
                             </div>
                             
                             <div class="form-group">
                                 <label class="label">Description</label>
                                 <textarea name="desc" class="textarea" rows="4" 
-                                          placeholder="Describe what your quiz covers and who it's for..."></textarea>
+                                          placeholder="Describe what your quiz covers and who it's for..."
+                                          maxlength="2000"></textarea>
                             </div>
                             
                             <button type="submit" class="btn btn-primary w-full">

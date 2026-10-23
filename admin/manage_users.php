@@ -1,65 +1,115 @@
 <?php
-session_start();
-require_once '../db.php';
+require_once __DIR__ . '/../security.php';
 
-// Check if user is admin
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
-    exit();
-}
+initSecureSession();
+setSecurityHeaders();
+
+requireAdmin('../login.php');
+
+$db = db();
+$success_message = '';
+$error_message = '';
 
 // Handle user actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $user_id = intval($_POST['user_id']);
+    if (!validateCSRFToken($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        $error_message = 'Invalid security token. Please refresh the page and try again.';
+        logSecurityEvent('csrf_validation_failed', "Admin user action", 'warning');
+    } elseif (isset($_POST['action'])) {
+        $user_id = sanitizeInt($_POST['user_id'] ?? 0, 1);
         
-        switch ($_POST['action']) {
-            case 'delete_user':
-                // First delete user's quiz attempts
-                mysqli_query($conn, "DELETE FROM leaderboard WHERE user_id = $user_id");
-                // Then delete user's quizzes
-                mysqli_query($conn, "DELETE FROM quizzes WHERE created_by = $user_id");
-                // Finally delete the user
-                $result = mysqli_query($conn, "DELETE FROM users WHERE id = $user_id AND role != 'admin'");
-                
-                if ($result) {
-                    $success_message = "User deleted successfully!";
-                } else {
-                    $error_message = "Error deleting user!";
-                }
-                break;
+        // Prevent deleting yourself
+        if ($user_id === getCurrentUserId()) {
+            $error_message = "You cannot delete your own account.";
+        } else {
+            switch ($_POST['action']) {
+                case 'delete_user':
+                    // Check if user is admin (protect admin accounts)
+                    $target_user = $db->fetchOne(
+                        "SELECT role FROM users WHERE id = ?",
+                        [$user_id],
+                        'i'
+                    );
+                    
+                    if ($target_user && $target_user['role'] === 'admin') {
+                        $error_message = "Cannot delete admin users.";
+                    } else {
+                        try {
+                            $db->beginTransaction();
+                            
+                            // Delete user's quiz attempts
+                            $db->executeNonQuery(
+                                "DELETE FROM leaderboard WHERE user_id = ?",
+                                [$user_id],
+                                'i'
+                            );
+                            
+                            // Delete user's quizzes (will cascade to questions via FK)
+                            $db->executeNonQuery(
+                                "DELETE FROM quizzes WHERE created_by = ?",
+                                [$user_id],
+                                'i'
+                            );
+                            
+                            // Finally delete the user
+                            $result = $db->executeNonQuery(
+                                "DELETE FROM users WHERE id = ? AND role != 'admin'",
+                                [$user_id],
+                                'i'
+                            );
+                            
+                            if ($result > 0) {
+                                $db->commit();
+                                $success_message = "User deleted successfully!";
+                                logSecurityEvent('user_deleted', "User ID: $user_id, Admin: " . getCurrentUsername());
+                            } else {
+                                $db->rollback();
+                                $error_message = "Error deleting user! User may not exist or is protected.";
+                            }
+                        } catch (Exception $e) {
+                            $db->rollback();
+                            $error_message = "Error deleting user: " . $e->getMessage();
+                            logSecurityEvent('user_delete_error', "Error: " . $e->getMessage(), 'error');
+                        }
+                    }
+                    break;
+            }
         }
     }
 }
 
-// Get users with statistics
-$users_query = "SELECT 
-    u.id,
-    u.username,
-    u.role,
-    COUNT(DISTINCT q.id) as quiz_count,
-    COUNT(DISTINCT l.id) as attempt_count,
-    AVG(l.score) as avg_score,
-    MAX(l.score) as best_score
-FROM users u
-LEFT JOIN quizzes q ON u.id = q.created_by
-LEFT JOIN leaderboard l ON u.id = l.user_id
-GROUP BY u.id, u.username, u.role
-ORDER BY u.id DESC";
-
-$users_result = mysqli_query($conn, $users_query);
+// Get users with statistics using prepared statement
+$users = $db->fetchAll(
+    "SELECT 
+        u.id,
+        u.username,
+        u.role,
+        COUNT(DISTINCT q.id) as quiz_count,
+        COUNT(DISTINCT l.id) as attempt_count,
+        AVG(l.score) as avg_score,
+        MAX(l.score) as best_score
+     FROM users u
+     LEFT JOIN quizzes q ON u.id = q.created_by
+     LEFT JOIN leaderboard l ON u.id = l.user_id
+     GROUP BY u.id, u.username, u.role
+     ORDER BY u.id DESC"
+);
 
 // Get total statistics
-$total_stats = mysqli_query($conn, "SELECT 
-    COUNT(*) as total_users,
-    COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_count,
-    COUNT(CASE WHEN role = 'user' THEN 1 END) as user_count
-FROM users");
-$stats = mysqli_fetch_assoc($total_stats);
-$stats['active_count'] = $stats['total_users']; // All users considered active for now
+$stats = $db->fetchOne(
+    "SELECT 
+        COUNT(*) as total_users,
+        COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_count,
+        COUNT(CASE WHEN role = 'user' THEN 1 END) as user_count
+     FROM users"
+) ?: [
+    'total_users' => 0,
+    'admin_count' => 0,
+    'user_count' => 0
+];
+$stats['active_count'] = $stats['total_users'];
 $stats['inactive_count'] = 0;
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -95,15 +145,15 @@ $stats['inactive_count'] = 0;
         </nav>
 
         <div class="container mx-auto px-4 py-8">
-            <?php if (isset($success_message)): ?>
+            <?php if ($success_message): ?>
                 <div class="alert alert-success mb-6">
-                    <span class="font-medium">Success!</span> <?php echo $success_message; ?>
+                    <span class="font-medium">Success!</span> <?php echo htmlspecialchars($success_message); ?>
                 </div>
             <?php endif; ?>
 
-            <?php if (isset($error_message)): ?>
+            <?php if ($error_message): ?>
                 <div class="alert alert-destructive mb-6">
-                    <span class="font-medium">Error!</span> <?php echo $error_message; ?>
+                    <span class="font-medium">Error!</span> <?php echo htmlspecialchars($error_message); ?>
                 </div>
             <?php endif; ?>
 
@@ -149,13 +199,13 @@ $stats['inactive_count'] = 0;
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php while ($user = mysqli_fetch_assoc($users_result)): ?>
+                                <?php foreach ($users as $user): ?>
                                 <tr class="border-b hover:bg-muted/30 transition-colors">
                                     <td class="p-4">
                                         <div class="flex items-center space-x-3">
                                             <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                                                 <span class="text-primary font-medium">
-                                                    <?php echo strtoupper(substr($user['username'], 0, 1)); ?>
+                                                    <?php echo strtoupper(substr(htmlspecialchars($user['username']), 0, 1)); ?>
                                                 </span>
                                             </div>
                                             <div>
@@ -191,10 +241,11 @@ $stats['inactive_count'] = 0;
                                         </div>
                                     </td>
                                     <td class="p-4">
-                                        <?php if ($user['role'] !== 'admin'): ?>
+                                        <?php if ($user['role'] !== 'admin' && $user['id'] !== getCurrentUserId()): ?>
                                             <div class="flex space-x-2">
                                                 <!-- Delete User -->
                                                 <form method="POST" style="display: inline;">
+                                                    <?= csrfField() ?>
                                                     <input type="hidden" name="action" value="delete_user">
                                                     <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
                                                     <button type="submit" class="btn btn-destructive btn-sm" 
@@ -203,12 +254,14 @@ $stats['inactive_count'] = 0;
                                                     </button>
                                                 </form>
                                             </div>
+                                        <?php elseif ($user['role'] === 'admin'): ?>
+                                            <span class="text-muted-foreground text-sm">Protected (Admin)</span>
                                         <?php else: ?>
-                                            <span class="text-muted-foreground text-sm">Protected</span>
+                                            <span class="text-muted-foreground text-sm">Current User</span>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>

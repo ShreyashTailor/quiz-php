@@ -1,51 +1,76 @@
 <?php
-session_start();
-include '../db.php';
+require_once __DIR__ . '/../security.php';
 
-// Check if user is admin
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
-    exit;
-}
+initSecureSession();
+setSecurityHeaders();
+
+requireAdmin('../login.php');
+
+$db = db();
+$success_message = '';
+$error_message = '';
 
 // Handle quiz approval/rejection
-if ($_POST) {
-    if (isset($_POST['approve_quiz'])) {
-        $quiz_id = (int)$_POST['quiz_id'];
-        $admin_notes = mysqli_real_escape_string($conn, $_POST['admin_notes']);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        $error_message = 'Invalid security token. Please refresh the page and try again.';
+        logSecurityEvent('csrf_validation_failed', "Admin quiz action", 'warning');
+    } elseif (isset($_POST['approve_quiz'])) {
+        $quiz_id = sanitizeInt($_POST['quiz_id'] ?? 0, 1);
+        $admin_notes = sanitizeString($_POST['admin_notes'] ?? '', 2000);
         
-        mysqli_query($conn, "UPDATE quizzes SET 
-                            status = 'approved', 
-                            admin_notes = '$admin_notes',
-                            approved_by = {$_SESSION['user_id']},
-                            approved_at = NOW()
-                            WHERE id = $quiz_id");
+        $result = $db->executeNonQuery(
+            "UPDATE quizzes SET 
+             status = 'approved', 
+             admin_notes = ?,
+             approved_by = ?,
+             approved_at = NOW()
+             WHERE id = ?",
+            [$admin_notes, getCurrentUserId(), $quiz_id],
+            'sii'
+        );
         
-        $success_message = "Quiz approved successfully!";
-    }
-    
-    if (isset($_POST['reject_quiz'])) {
-        $quiz_id = (int)$_POST['quiz_id'];
-        $admin_notes = mysqli_real_escape_string($conn, $_POST['admin_notes']);
+        if ($result > 0) {
+            $success_message = "Quiz approved successfully!";
+            logSecurityEvent('quiz_approved', "Quiz ID: $quiz_id, Admin: " . getCurrentUsername());
+        } else {
+            $error_message = "Failed to approve quiz.";
+            logSecurityEvent('quiz_approve_failed', "Error: " . $db->getLastError(), 'error');
+        }
+    } elseif (isset($_POST['reject_quiz'])) {
+        $quiz_id = sanitizeInt($_POST['quiz_id'] ?? 0, 1);
+        $admin_notes = sanitizeString($_POST['admin_notes'] ?? '', 2000);
         
-        mysqli_query($conn, "UPDATE quizzes SET 
-                            status = 'rejected', 
-                            admin_notes = '$admin_notes',
-                            approved_by = {$_SESSION['user_id']},
-                            approved_at = NOW()
-                            WHERE id = $quiz_id");
+        $result = $db->executeNonQuery(
+            "UPDATE quizzes SET 
+             status = 'rejected', 
+             admin_notes = ?,
+             approved_by = ?,
+             approved_at = NOW()
+             WHERE id = ?",
+            [$admin_notes, getCurrentUserId(), $quiz_id],
+            'sii'
+        );
         
-        $success_message = "Quiz rejected.";
+        if ($result > 0) {
+            $success_message = "Quiz rejected.";
+            logSecurityEvent('quiz_rejected', "Quiz ID: $quiz_id, Admin: " . getCurrentUsername());
+        } else {
+            $error_message = "Failed to reject quiz.";
+            logSecurityEvent('quiz_reject_failed', "Error: " . $db->getLastError(), 'error');
+        }
     }
 }
 
-// Get pending quizzes
-$pending_quizzes = mysqli_query($conn, "SELECT q.*, COUNT(qs.id) as question_count 
-                                       FROM quizzes q 
-                                       LEFT JOIN questions qs ON q.id = qs.quiz_id 
-                                       WHERE q.status = 'pending' 
-                                       GROUP BY q.id 
-                                       ORDER BY q.created_at ASC");
+// Get pending quizzes using prepared statement
+$pending_quizzes = $db->fetchAll(
+    "SELECT q.*, COUNT(qs.id) as question_count 
+     FROM quizzes q 
+     LEFT JOIN questions qs ON q.id = qs.quiz_id 
+     WHERE q.status = 'pending' 
+     GROUP BY q.id 
+     ORDER BY q.created_at ASC"
+);
 
 // Get statistics
 $stats_query = "SELECT 
@@ -54,16 +79,24 @@ $stats_query = "SELECT
     (SELECT COUNT(*) FROM quizzes WHERE status = 'rejected') as rejected_count,
     (SELECT COUNT(*) FROM users) as total_users,
     (SELECT COUNT(*) FROM leaderboard) as total_attempts";
-$stats_result = mysqli_query($conn, $stats_query);
-$stats = mysqli_fetch_assoc($stats_result);
+$stats_result = $db->fetchOne($stats_query);
+$stats = $stats_result ?: [
+    'pending_count' => 0,
+    'approved_count' => 0,
+    'rejected_count' => 0,
+    'total_users' => 0,
+    'total_attempts' => 0
+];
 
 // Get recent activity
-$recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name 
-                                       FROM quizzes q 
-                                       LEFT JOIN users u ON q.approved_by = u.id 
-                                       WHERE q.status IN ('approved', 'rejected') 
-                                       ORDER BY q.approved_at DESC 
-                                       LIMIT 10");
+$recent_activity = $db->fetchAll(
+    "SELECT q.*, u.username as approver_name 
+     FROM quizzes q 
+     LEFT JOIN users u ON q.approved_by = u.id 
+     WHERE q.status IN ('approved', 'rejected') 
+     ORDER BY q.approved_at DESC 
+     LIMIT 10"
+);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -93,14 +126,23 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
             <!-- Welcome Header -->
             <div class="mb-8">
                 <h1 class="text-3xl font-bold mb-2">Admin Dashboard</h1>
-                <p class="text-muted-foreground">Welcome back, <?php echo htmlspecialchars($_SESSION['username']); ?>! Manage quiz submissions and monitor platform activity.</p>
+                <p class="text-muted-foreground">Welcome back, <?php echo htmlspecialchars(getCurrentUsername()); ?>! Manage quiz submissions and monitor platform activity.</p>
             </div>
 
-            <?php if (isset($success_message)): ?>
+            <?php if ($success_message): ?>
                 <div class="alert alert-success mb-6">
                     <div class="flex items-center">
                         <span class="text-lg mr-2">✅</span>
-                        <span><?php echo $success_message; ?></span>
+                        <span><?php echo htmlspecialchars($success_message); ?></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($error_message): ?>
+                <div class="alert alert-destructive mb-6">
+                    <div class="flex items-center">
+                        <span class="text-lg mr-2">❌</span>
+                        <span><?php echo htmlspecialchars($error_message); ?></span>
                     </div>
                 </div>
             <?php endif; ?>
@@ -210,9 +252,9 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
                     <p class="card-description"><?php echo $stats['pending_count']; ?> quiz(es) awaiting review</p>
                 </div>
                 <div class="card-content">
-                    <?php if (mysqli_num_rows($pending_quizzes) > 0): ?>
+                    <?php if (!empty($pending_quizzes)): ?>
                         <div class="space-y-6">
-                            <?php while ($quiz = mysqli_fetch_assoc($pending_quizzes)): ?>
+                            <?php foreach ($pending_quizzes as $quiz): ?>
                                 <div class="border rounded-lg p-6">
                                     <div class="grid grid-cols-2 gap-6">
                                         <div>
@@ -242,12 +284,14 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
                                         
                                         <div>
                                             <form method="post" class="space-y-4">
+                                                <?= csrfField() ?>
                                                 <input type="hidden" name="quiz_id" value="<?php echo $quiz['id']; ?>">
                                                 
                                                 <div class="form-group">
                                                     <label class="label">Admin Notes:</label>
                                                     <textarea name="admin_notes" class="textarea" rows="3" 
-                                                              placeholder="Add notes about your decision (optional)..."></textarea>
+                                                              placeholder="Add notes about your decision (optional)..."
+                                                              maxlength="2000"></textarea>
                                                 </div>
                                                 
                                                 <div class="flex space-x-3">
@@ -264,7 +308,7 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
                                         </div>
                                     </div>
                                 </div>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </div>
                     <?php else: ?>
                         <div class="text-center p-6">
@@ -283,9 +327,9 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
                     <p class="card-description">Latest review actions and decisions</p>
                 </div>
                 <div class="card-content">
-                    <?php if (mysqli_num_rows($recent_activity) > 0): ?>
+                    <?php if (!empty($recent_activity)): ?>
                         <div class="space-y-4">
-                            <?php while ($activity = mysqli_fetch_assoc($recent_activity)): ?>
+                            <?php foreach ($recent_activity as $activity): ?>
                                 <div class="flex items-start space-x-4 p-4 border rounded-lg">
                                     <div class="text-2xl">
                                         <?php echo ($activity['status'] === 'approved') ? '✅' : '❌'; ?>
@@ -297,7 +341,7 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
                                             <strong><?php echo htmlspecialchars($activity['approver_name'] ?? 'Unknown'); ?></strong>
                                             on <?php echo date('M j, Y g:i A', strtotime($activity['approved_at'])); ?>
                                         </p>
-                                        <?php if ($activity['admin_notes']): ?>
+                                        <?php if (!empty($activity['admin_notes'])): ?>
                                             <p class="text-sm mt-2 p-2 bg-muted rounded">
                                                 📝 Notes: <?php echo htmlspecialchars($activity['admin_notes']); ?>
                                             </p>
@@ -309,7 +353,7 @@ $recent_activity = mysqli_query($conn, "SELECT q.*, u.username as approver_name
                                         </span>
                                     </div>
                                 </div>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </div>
                     <?php else: ?>
                         <div class="text-center p-6">

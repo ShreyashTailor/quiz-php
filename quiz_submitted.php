@@ -1,27 +1,39 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit;
-}
+initSecureSession();
+setSecurityHeaders();
 
-$quiz_id = $_GET['quiz_id'];
+requireLogin();
 
-// Get quiz details
-$quiz_result = mysqli_query($conn, "SELECT * FROM quizzes WHERE id = $quiz_id");
-$quiz = mysqli_fetch_assoc($quiz_result);
+$db = db();
 
-// Check if user owns this quiz
-if ($quiz['created_by'] != $_SESSION['user_id'] && $_SESSION['role'] !== 'admin') {
+$quiz_id = sanitizeInt($_GET['quiz_id'] ?? 0, 1);
+
+// Get quiz details using prepared statement
+$quiz = $db->fetchOne(
+    "SELECT * FROM quizzes WHERE id = ?",
+    [$quiz_id],
+    'i'
+);
+
+if (!$quiz) {
     header("Location: index.php");
     exit;
 }
 
-// Get question count
-$question_count = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id = $quiz_id"));
+// Check if user owns this quiz
+if ($quiz['created_by'] != getCurrentUserId() && !isAdmin()) {
+    header("Location: index.php");
+    exit;
+}
+
+// Get question count using prepared statement
+$question_count = $db->fetchColumn(
+    "SELECT COUNT(*) FROM questions WHERE quiz_id = ?",
+    [$quiz_id],
+    'i'
+) ?: 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -39,7 +51,7 @@ $question_count = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM questions W
             </div>
             <div class="nav-links">
                 <a href="index.php" class="btn btn-outline">🏠 Home</a>
-                <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>!</span>
                 <a href="logout.php" class="btn btn-outline">🚪 Logout</a>
                 <button id="theme-toggle" class="btn btn-outline" aria-label="Toggle theme">🌙</button>
             </div>
@@ -48,7 +60,7 @@ $question_count = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM questions W
 
     <main class="container py-8">
         <div class="max-w-4xl mx-auto">
-            <?php if ($_SESSION['role'] === 'admin'): ?>
+            <?php if (isAdmin()): ?>
                 <!-- Admin created quiz - auto approved -->
                 <div class="text-center mb-8">
                     <div class="text-8xl mb-6">🎉</div>
@@ -252,7 +264,7 @@ $question_count = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM questions W
             console.log('Quiz submitted page loaded with Shadcn UI!');
             
             // Add celebration animation for admin users
-            <?php if ($_SESSION['role'] === 'admin'): ?>
+            <?php if (isAdmin()): ?>
             setTimeout(() => {
                 const emoji = document.querySelector('.text-8xl');
                 emoji.style.animation = 'bounce 2s ease-in-out infinite';

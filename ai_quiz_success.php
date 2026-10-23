@@ -1,50 +1,61 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit;
-}
+initSecureSession();
+setSecurityHeaders();
+
+requireLogin();
+
+$db = db();
 
 if (!isset($_GET['quiz_id']) || !isset($_GET['questions'])) {
     header("Location: index.php");
     exit;
 }
 
-$quiz_id = (int)$_GET['quiz_id'];
-$questions_count = (int)$_GET['questions'];
+$quiz_id = sanitizeInt($_GET['quiz_id'] ?? 0, 1);
+$questions_count = sanitizeInt($_GET['questions'] ?? 0, 1);
 
-// Get quiz details
-$quiz_result = mysqli_query($conn, "SELECT * FROM quizzes WHERE id = $quiz_id AND created_by = {$_SESSION['user_id']}");
-$quiz = mysqli_fetch_assoc($quiz_result);
+// Get quiz details using prepared statement
+$quiz = $db->fetchOne(
+    "SELECT * FROM quizzes WHERE id = ? AND created_by = ?",
+    [$quiz_id, getCurrentUserId()],
+    'ii'
+);
 
 if (!$quiz) {
     header("Location: index.php");
     exit;
 }
 
-// Get sample questions for preview
-$sample_questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id = $quiz_id LIMIT 3");
+// Get sample questions for preview using prepared statement
+$sample_questions = $db->fetchAll(
+    "SELECT * FROM questions WHERE quiz_id = ? LIMIT 3",
+    [$quiz_id],
+    'i'
+);
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Quiz Created Successfully - QuizMaster</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="shadcn-style.css">
 </head>
 <body>
     <!-- Navigation -->
-    <div class="navbar">
-        <div class="nav-left">
-            <h1><a href="index.php" style="color: #333; text-decoration: none;">QuizMaster</a></h1>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-left">
+                <h1><a href="index.php" style="color: #333; text-decoration: none;">QuizMaster</a></h1>
+            </div>
+            <div class="nav-right">
+                <span class="greeting-text">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>!</span>
+                <a href="logout.php" class="nav-btn logout-btn">Logout</a>
+            </div>
         </div>
-        <div class="nav-right">
-            <span class="greeting-text">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
-            <a href="logout.php" class="nav-btn logout-btn">Logout</a>
-        </div>
-    </div>
+    </nav>
 
     <div class="container">
         <div class="ai-success-container">
@@ -101,7 +112,7 @@ $sample_questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id =
             </div>
 
             <!-- Sample Questions Preview -->
-            <?php if (mysqli_num_rows($sample_questions) > 0): ?>
+            <?php if (!empty($sample_questions)): ?>
                 <div class="questions-preview-section">
                     <h3>👀 Sample Questions Preview</h3>
                     <p>Here's a preview of some questions AI generated from your PDF:</p>
@@ -109,7 +120,7 @@ $sample_questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id =
                     <div class="sample-questions">
                         <?php 
                         $q_num = 1;
-                        while ($q = mysqli_fetch_assoc($sample_questions)): 
+                        foreach ($sample_questions as $q): 
                         ?>
                             <div class="sample-question">
                                 <h4>Question <?php echo $q_num; ?>:</h4>
@@ -151,7 +162,7 @@ $sample_questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id =
                             </div>
                         <?php 
                         $q_num++;
-                        endwhile; 
+                        endforeach; 
                         ?>
                     </div>
                 </div>

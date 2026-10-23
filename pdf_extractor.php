@@ -1,19 +1,40 @@
 <?php
 /**
- * Simple PDF Text Extractor
- * This is a basic implementation for demonstration purposes.
+ * Secure PDF Text Extractor
+ * Uses a basic implementation for demonstration purposes.
  * For production use, consider using libraries like TCPDF, FPDF, or pdf2text
  */
 
-class SimplePDFExtractor {
+class SecurePDFExtractor {
     
-    public static function extractText($pdfPath) {
-        // This is a simplified approach
-        // In production, you should use a proper PDF parsing library
+    /**
+     * Extract text from PDF file
+     * 
+     * @param string $pdfPath Path to PDF file
+     * @return string Extracted text content
+     */
+    public static function extractText(string $pdfPath): string {
+        // Validate file path
+        if (!file_exists($pdfPath) || !is_readable($pdfPath)) {
+            throw new InvalidArgumentException('PDF file not found or not readable');
+        }
+        
+        // Validate file is actually a PDF
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $pdfPath);
+        finfo_close($finfo);
+        
+        if ($mimeType !== 'application/pdf') {
+            throw new InvalidArgumentException('File is not a valid PDF');
+        }
         
         try {
             // Try to read basic text content from PDF
             $content = file_get_contents($pdfPath);
+            
+            if ($content === false) {
+                throw new RuntimeException('Failed to read PDF file');
+            }
             
             // Simple text extraction using regex (very basic)
             // This won't work for all PDFs, but it's a starting point
@@ -64,8 +85,22 @@ class SimplePDFExtractor {
      * Alternative method using pdftotext if available
      * Requires pdftotext to be installed on the server
      */
-    public static function extractTextWithPdfToText($pdfPath) {
-        $command = "pdftotext '$pdfPath' -";
+    public static function extractTextWithPdfToText(string $pdfPath): string {
+        // Validate file path
+        if (!file_exists($pdfPath) || !is_readable($pdfPath)) {
+            throw new InvalidArgumentException('PDF file not found or not readable');
+        }
+        
+        // Check if pdftotext is available
+        if (!function_exists('shell_exec') || !is_executable('/usr/bin/pdftotext')) {
+            // Fallback to simple extraction
+            return self::extractText($pdfPath);
+        }
+        
+        // Escape shell argument to prevent command injection
+        $escapedPath = escapeshellarg($pdfPath);
+        $command = "pdftotext $escapedPath -";
+        
         $text = shell_exec($command);
         
         if ($text && strlen(trim($text)) > 50) {
@@ -79,9 +114,18 @@ class SimplePDFExtractor {
     /**
      * Get PDF metadata
      */
-    public static function getPDFInfo($pdfPath) {
+    public static function getPDFInfo(string $pdfPath): array {
+        // Validate file path
+        if (!file_exists($pdfPath) || !is_readable($pdfPath)) {
+            throw new InvalidArgumentException('PDF file not found or not readable');
+        }
+        
         $info = [];
         $content = file_get_contents($pdfPath);
+        
+        if ($content === false) {
+            return $info;
+        }
         
         // Extract title
         if (preg_match('/\/Title\s*\(([^)]+)\)/', $content, $matches)) {
@@ -104,4 +148,6 @@ class SimplePDFExtractor {
         return $info;
     }
 }
-?>
+
+// Backward compatibility alias
+class_alias('SecurePDFExtractor', 'SimplePDFExtractor');

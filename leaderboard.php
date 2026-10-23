@@ -1,54 +1,76 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
+
+initSecureSession();
+setSecurityHeaders();
+
+$db = db();
 
 // Set timezone to GMT+5:30
 date_default_timezone_set('Asia/Kolkata');
 
-// Get filter parameters
-$quiz_filter = isset($_GET['quiz']) ? (int)$_GET['quiz'] : 'all';
-$sort_by = isset($_GET['sort']) ? $_GET['sort'] : 'percentage';
-$order = isset($_GET['order']) ? $_GET['order'] : 'DESC';
+// Get filter parameters with validation
+$quiz_filter = sanitizeInt($_GET['quiz'] ?? 'all');
+$sort_by = sanitizeString($_GET['sort'] ?? 'percentage', 50);
+$order = sanitizeString($_GET['order'] ?? 'DESC', 4);
 
-// Build query based on filters
+// Build query based on filters using prepared statements
 $where_clause = "";
+$params = [];
+$types = '';
+
 if ($quiz_filter !== 'all') {
-    $where_clause = "WHERE quiz_id = $quiz_filter";
+    $where_clause = "WHERE quiz_id = ?";
+    $params[] = $quiz_filter;
+    $types .= 'i';
 }
 
-// Build ORDER BY clause
+// Build ORDER BY clause (validated against whitelist)
 $valid_sorts = ['percentage', 'score', 'completion_time', 'username'];
 $sort_by = in_array($sort_by, $valid_sorts) ? $sort_by : 'percentage';
 $order = ($order === 'ASC') ? 'ASC' : 'DESC';
 
-// Get leaderboard data
-$leaderboard_query = "SELECT * FROM leaderboard $where_clause ORDER BY $sort_by $order, completion_time DESC";
-$leaderboard_result = mysqli_query($conn, $leaderboard_query);
+// Get leaderboard data using prepared statement
+$leaderboard = $db->fetchAll(
+    "SELECT * FROM leaderboard $where_clause ORDER BY $sort_by $order, completion_time DESC",
+    $params,
+    $types
+);
 
 // Get quiz statistics
-$stats_query = "SELECT 
-    COUNT(*) as total_attempts,
-    COUNT(DISTINCT user_id) as unique_users,
-    COUNT(DISTINCT quiz_id) as unique_quizzes,
-    AVG(percentage) as avg_score,
-    MAX(percentage) as highest_score
-    FROM leaderboard $where_clause";
-$stats_result = mysqli_query($conn, $stats_query);
-$stats = mysqli_fetch_assoc($stats_result);
+$stats = $db->fetchOne(
+    "SELECT 
+        COUNT(*) as total_attempts,
+        COUNT(DISTINCT user_id) as unique_users,
+        COUNT(DISTINCT quiz_id) as unique_quizzes,
+        AVG(percentage) as avg_score,
+        MAX(percentage) as highest_score
+     FROM leaderboard $where_clause",
+    $params,
+    $types
+) ?: [
+    'total_attempts' => 0,
+    'unique_users' => 0,
+    'unique_quizzes' => 0,
+    'avg_score' => 0,
+    'highest_score' => 0
+];
 
 // Get available quizzes for filter
-$quizzes_query = "SELECT DISTINCT q.id, q.title FROM quizzes q 
-                  INNER JOIN leaderboard l ON q.id = l.quiz_id 
-                  ORDER BY q.title";
-$quizzes_result = mysqli_query($conn, $quizzes_query);
+$quizzes = $db->fetchAll(
+    "SELECT DISTINCT q.id, q.title FROM quizzes q 
+     INNER JOIN leaderboard l ON q.id = l.quiz_id 
+     ORDER BY q.title"
+);
 
 // Get top performers
-$top_performers_query = "SELECT username, AVG(percentage) as avg_percentage, COUNT(*) as quiz_count
-                        FROM leaderboard 
-                        GROUP BY username 
-                        ORDER BY avg_percentage DESC, quiz_count DESC 
-                        LIMIT 5";
-$top_performers_result = mysqli_query($conn, $top_performers_query);
+$top_performers = $db->fetchAll(
+    "SELECT username, AVG(percentage) as avg_percentage, COUNT(*) as quiz_count
+     FROM leaderboard 
+     GROUP BY username 
+     ORDER BY avg_percentage DESC, quiz_count DESC 
+     LIMIT 5"
+);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -66,8 +88,8 @@ $top_performers_result = mysqli_query($conn, $top_performers_query);
             </div>
             <div class="nav-links">
                 <a href="index.php" class="btn btn-outline">🏠 Home</a>
-                <?php if (isset($_SESSION['username'])): ?>
-                    <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <?php if (isLoggedIn()): ?>
+                    <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>!</span>
                     <a href="logout.php" class="btn btn-outline">🚪 Logout</a>
                 <?php else: ?>
                     <a href="login.php" class="btn btn-primary">🔑 Login</a>
@@ -101,7 +123,7 @@ $top_performers_result = mysqli_query($conn, $top_performers_query);
                 </div>
                 <div class="card text-center">
                     <div class="card-content">
-                        <div class="text-3xl font-bold text-primary"><?php echo number_format($stats['avg_score'], 1); ?>%</div>
+                        <div class="text-3xl font-bold text-primary"><?php echo number_format($stats['avg_score'] ?? 0, 1); ?>%</div>
                         <p class="text-sm text-muted-foreground">Average Score</p>
                     </div>
                 </div>
@@ -119,11 +141,11 @@ $top_performers_result = mysqli_query($conn, $top_performers_query);
                             <label class="label">Filter by Quiz:</label>
                             <select name="quiz" class="select">
                                 <option value="all" <?php echo ($quiz_filter === 'all') ? 'selected' : ''; ?>>All Quizzes</option>
-                                <?php while ($quiz = mysqli_fetch_assoc($quizzes_result)): ?>
+                                <?php foreach ($quizzes as $quiz): ?>
                                     <option value="<?php echo $quiz['id']; ?>" <?php echo ($quiz_filter == $quiz['id']) ? 'selected' : ''; ?>>
                                         <?php echo htmlspecialchars($quiz['title']); ?>
                                     </option>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="form-group">
@@ -155,7 +177,7 @@ $top_performers_result = mysqli_query($conn, $top_performers_query);
                     <h3 class="card-title">📊 Leaderboard Rankings</h3>
                 </div>
                 <div class="card-content">
-                    <?php if (mysqli_num_rows($leaderboard_result) > 0): ?>
+                    <?php if (!empty($leaderboard)): ?>
                         <div class="overflow-x-auto">
                             <table class="w-full">
                                 <thead>
@@ -171,7 +193,7 @@ $top_performers_result = mysqli_query($conn, $top_performers_query);
                                 <tbody>
                                     <?php 
                                     $rank = 1;
-                                    while ($entry = mysqli_fetch_assoc($leaderboard_result)): 
+                                    foreach ($leaderboard as $entry): 
                                         $percentage = $entry['percentage'];
                                         $badge_class = '';
                                         if ($percentage >= 90) $badge_class = 'badge-default';
@@ -203,7 +225,7 @@ $top_performers_result = mysqli_query($conn, $top_performers_query);
                                         </tr>
                                     <?php 
                                     $rank++;
-                                    endwhile; ?>
+                                    endforeach; ?>
                                 </tbody>
                             </table>
                         </div>

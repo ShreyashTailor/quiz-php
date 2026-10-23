@@ -1,57 +1,104 @@
 <?php
-session_start();
-include '../db.php';
+require_once __DIR__ . '/../security.php';
 
-// Check if user is admin
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
+initSecureSession();
+setSecurityHeaders();
+
+requireAdmin('../login.php');
+
+$db = db();
+
+$quiz_id = sanitizeInt($_GET['id'] ?? 0, 1);
+$success_message = '';
+$error_message = '';
+
+// Handle quiz actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        $error_message = 'Invalid security token. Please refresh the page and try again.';
+        logSecurityEvent('csrf_validation_failed', "Admin preview action", 'warning');
+    } elseif (isset($_POST['delete_quiz'])) {
+        try {
+            $db->beginTransaction();
+            
+            // Delete questions first (foreign key constraint)
+            $db->executeNonQuery(
+                "DELETE FROM questions WHERE quiz_id = ?",
+                [$quiz_id],
+                'i'
+            );
+            
+            // Delete leaderboard entries
+            $db->executeNonQuery(
+                "DELETE FROM leaderboard WHERE quiz_id = ?",
+                [$quiz_id],
+                'i'
+            );
+            
+            // Delete quiz
+            $result = $db->executeNonQuery(
+                "DELETE FROM quizzes WHERE id = ?",
+                [$quiz_id],
+                'i'
+            );
+            
+            if ($result > 0) {
+                $db->commit();
+                logSecurityEvent('quiz_deleted', "Quiz ID: $quiz_id, Admin: " . getCurrentUsername());
+                header("Location: manage_quizzes.php?deleted=1");
+                exit;
+            } else {
+                $db->rollback();
+                $error_message = "Quiz not found or already deleted.";
+            }
+        } catch (Exception $e) {
+            $db->rollback();
+            $error_message = "Error deleting quiz: " . $e->getMessage();
+            logSecurityEvent('quiz_delete_error', "Error: " . $e->getMessage(), 'error');
+        }
+    } elseif (isset($_POST['approve_quiz']) || isset($_POST['reject_quiz'])) {
+        $status = isset($_POST['approve_quiz']) ? 'approved' : 'rejected';
+        $admin_notes = sanitizeString($_POST['admin_notes'] ?? '', 2000);
+        
+        $result = $db->executeNonQuery(
+            "UPDATE quizzes SET 
+             status = ?,
+             admin_notes = ?,
+             approved_by = ?,
+             approved_at = NOW()
+             WHERE id = ?",
+            [$status, $admin_notes, getCurrentUserId(), $quiz_id],
+            'ssii'
+        );
+        
+        if ($result > 0) {
+            $success_message = "Quiz " . $status . " successfully!";
+            logSecurityEvent('quiz_' . $status, "Quiz ID: $quiz_id, Admin: " . getCurrentUsername());
+        } else {
+            $error_message = "Failed to update quiz status.";
+        }
+    }
+}
+
+// Get quiz details
+$quiz = $db->fetchOne(
+    "SELECT * FROM quizzes WHERE id = ?",
+    [$quiz_id],
+    'i'
+);
+
+if (!$quiz) {
+    header("Location: manage_quizzes.php");
     exit;
 }
 
-if (!isset($_GET['id'])) {
-    die("Quiz ID not provided.");
-}
-
-$quiz_id = (int) $_GET['id'];
-
-// Handle quiz actions
-if ($_POST) {
-    if (isset($_POST['delete_quiz'])) {
-        // Delete questions first (foreign key constraint)
-        mysqli_query($conn, "DELETE FROM questions WHERE quiz_id = $quiz_id");
-        // Delete leaderboard entries
-        mysqli_query($conn, "DELETE FROM leaderboard WHERE quiz_id = $quiz_id");
-        // Delete quiz
-        mysqli_query($conn, "DELETE FROM quizzes WHERE id = $quiz_id");
-        
-        header("Location: manage_quizzes.php?deleted=1");
-        exit;
-    }
-    
-    if (isset($_POST['approve_quiz']) || isset($_POST['reject_quiz'])) {
-        $status = isset($_POST['approve_quiz']) ? 'approved' : 'rejected';
-        $admin_notes = mysqli_real_escape_string($conn, $_POST['admin_notes']);
-        
-        mysqli_query($conn, "UPDATE quizzes SET 
-                            status = '$status', 
-                            admin_notes = '$admin_notes',
-                            approved_by = {$_SESSION['user_id']},
-                            approved_at = NOW()
-                            WHERE id = $quiz_id");
-        
-        $success_message = "Quiz " . $status . " successfully!";
-    }
-}
-
-$result = mysqli_query($conn, "SELECT * FROM quizzes WHERE id=$quiz_id");
-$quiz = mysqli_fetch_assoc($result);
-
-if (!$quiz) {
-    die("Quiz not found!");
-}
-
-$questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id=$quiz_id");
-$question_count = mysqli_num_rows($questions);
+// Get questions using prepared statement
+$questions = $db->fetchAll(
+    "SELECT * FROM questions WHERE quiz_id = ? ORDER BY id",
+    [$quiz_id],
+    'i'
+);
+$question_count = count($questions);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -84,11 +131,20 @@ $question_count = mysqli_num_rows($questions);
                 <p class="text-muted-foreground text-lg">Review and manage this quiz submission</p>
             </div>
 
-            <?php if (isset($success_message)): ?>
+            <?php if ($success_message): ?>
                 <div class="alert alert-success mb-6">
                     <div class="flex items-center">
                         <span class="text-lg mr-2">✅</span>
-                        <span><?php echo $success_message; ?></span>
+                        <span><?php echo htmlspecialchars($success_message); ?></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($error_message): ?>
+                <div class="alert alert-destructive mb-6">
+                    <div class="flex items-center">
+                        <span class="text-lg mr-2">❌</span>
+                        <span><?php echo htmlspecialchars($error_message); ?></span>
                     </div>
                 </div>
             <?php endif; ?>
@@ -141,7 +197,7 @@ $question_count = mysqli_num_rows($questions);
                             </div>
                             <span class="font-bold"><?php echo $question_count; ?></span>
                         </div>
-                        <?php if ($quiz['admin_notes']): ?>
+                        <?php if (!empty($quiz['admin_notes'])): ?>
                             <div class="flex items-center justify-between p-3 bg-muted rounded-lg">
                                 <div class="flex items-center space-x-2">
                                     <span>📝</span>
@@ -171,6 +227,7 @@ $question_count = mysqli_num_rows($questions);
                         <!-- Delete Quiz -->
                         <form method="post" style="display: inline;" class="w-full"
                               onsubmit="return confirm('Are you sure you want to delete this quiz? This action cannot be undone and will remove all questions and user attempts.')">
+                            <?= csrfField() ?>
                             <button type="submit" name="delete_quiz" 
                                     class="btn btn-destructive w-full">
                                 🗑️ Delete Quiz
@@ -215,8 +272,7 @@ $question_count = mysqli_num_rows($questions);
                         <div class="space-y-6">
                             <?php 
                             $q_num = 1;
-                            mysqli_data_seek($questions, 0);
-                            while ($q = mysqli_fetch_assoc($questions)): 
+                            foreach ($questions as $q): 
                             ?>
                                 <div class="border rounded-lg p-6">
                                     <h4 class="text-primary font-semibold mb-3">Question <?php echo $q_num; ?></h4>
@@ -262,7 +318,7 @@ $question_count = mysqli_num_rows($questions);
                                 </div>
                             <?php 
                             $q_num++;
-                            endwhile; 
+                            endforeach; 
                             ?>
                         </div>
                     </div>
@@ -278,6 +334,7 @@ $question_count = mysqli_num_rows($questions);
                     </div>
                     <div class="card-content">
                         <form method="post" class="space-y-4">
+                            <?= csrfField() ?>
                             <div class="form-group">
                                 <label class="label">Admin Notes (Optional):</label>
                                 <textarea name="admin_notes" class="textarea" rows="3" 
@@ -314,111 +371,5 @@ $question_count = mysqli_num_rows($questions);
             console.log('Admin preview page loaded with Shadcn UI!');
         });
     </script>
-</body>
-</html>
-
-        <!-- Questions Preview -->
-        <?php if ($question_count == 0): ?>
-            <div class="no-questions">
-                <p>⚠️ This quiz has no questions yet.</p>
-                <p>Questions are required before the quiz can be approved.</p>
-            </div>
-        <?php else: ?>
-            <div class="questions-section">
-                <h3>📝 Questions Preview</h3>
-                <div class="questions-container">
-                    <?php 
-                    $q_num = 1;
-                    while ($q = mysqli_fetch_assoc($questions)): 
-                    ?>
-                        <div class="question-preview-card">
-                            <div class="question-header">
-                                <h4>Question <?php echo $q_num; ?></h4>
-                            </div>
-                            
-                            <div class="question-content">
-                                <p class="question-text"><?php echo htmlspecialchars($q['question']); ?></p>
-                                
-                                <div class="options-grid">
-                                    <div class="option-item <?php echo ($q['correct_option'] === 'A') ? 'correct' : ''; ?>">
-                                        <span class="option-label">A)</span>
-                                        <span class="option-text"><?php echo htmlspecialchars($q['option_a']); ?></span>
-                                        <?php if ($q['correct_option'] === 'A'): ?>
-                                            <span class="correct-indicator">✅ Correct</span>
-                                        <?php endif; ?>
-                                    </div>
-                                    
-                                    <div class="option-item <?php echo ($q['correct_option'] === 'B') ? 'correct' : ''; ?>">
-                                        <span class="option-label">B)</span>
-                                        <span class="option-text"><?php echo htmlspecialchars($q['option_b']); ?></span>
-                                        <?php if ($q['correct_option'] === 'B'): ?>
-                                            <span class="correct-indicator">✅ Correct</span>
-                                        <?php endif; ?>
-                                    </div>
-                                    
-                                    <div class="option-item <?php echo ($q['correct_option'] === 'C') ? 'correct' : ''; ?>">
-                                        <span class="option-label">C)</span>
-                                        <span class="option-text"><?php echo htmlspecialchars($q['option_c']); ?></span>
-                                        <?php if ($q['correct_option'] === 'C'): ?>
-                                            <span class="correct-indicator">✅ Correct</span>
-                                        <?php endif; ?>
-                                    </div>
-                                    
-                                    <div class="option-item <?php echo ($q['correct_option'] === 'D') ? 'correct' : ''; ?>">
-                                        <span class="option-label">D)</span>
-                                        <span class="option-text"><?php echo htmlspecialchars($q['option_d']); ?></span>
-                                        <?php if ($q['correct_option'] === 'D'): ?>
-                                            <span class="correct-indicator">✅ Correct</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    <?php 
-                    $q_num++;
-                    endwhile; 
-                    ?>
-                </div>
-            </div>
-        <?php endif; ?>
-
-        <!-- Admin Action Buttons (Modern Shadcn UI) -->
-        <?php if ($quiz['status'] === 'pending'): ?>
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">✅ Approval Actions</h2>
-                    <p class="text-sm text-muted-foreground">Review and change quiz status</p>
-                </div>
-                <div class="card-content">
-                    <form method="post" class="space-y-4">
-                        <div class="form-group">
-                            <label class="label">Admin Notes (Optional):</label>
-                            <textarea name="admin_notes" class="textarea" rows="3" 
-                                      placeholder="Add notes about your decision..."></textarea>
-                        </div>
-                        
-                        <div class="flex space-x-4">
-                            <button type="submit" name="approve_quiz" class="btn btn-primary flex-1"
-                                    onclick="return confirm('Are you sure you want to approve this quiz?')">
-                                ✅ Approve Quiz
-                            </button>
-                            <button type="submit" name="reject_quiz" class="btn btn-destructive flex-1"
-                                    onclick="return confirm('Are you sure you want to reject this quiz?')">
-                                ❌ Reject Quiz
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        <?php endif; ?>
-
-        <!-- Navigation Actions -->
-        <div class="text-center">
-            <a href="dashboard.php" class="btn btn-outline">🛠️ Back to Dashboard</a>
-            <?php if ($quiz['status'] === 'approved'): ?>
-                <a href="../quiz.php?id=<?php echo $quiz_id; ?>" class="btn btn-secondary ml-4">🎯 Take Quiz</a>
-            <?php endif; ?>
-        </div>
-    </div>
 </body>
 </html>

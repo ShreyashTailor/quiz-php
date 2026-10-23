@@ -1,12 +1,16 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
+
+initSecureSession();
+setSecurityHeaders();
+
+$db = db();
 
 // Set timezone to GMT+5:30 (India Standard Time)
 date_default_timezone_set('Asia/Kolkata');
 
 // Function to get greeting based on current time
-function getTimeBasedGreeting() {
+function getTimeBasedGreeting(): string {
     $hour = date('H');
     
     if ($hour >= 5 && $hour < 12) {
@@ -19,10 +23,10 @@ function getTimeBasedGreeting() {
 }
 
 // Only show approved quizzes to regular users, show all to admins
-if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
-    $quizzes = mysqli_query($conn, "SELECT * FROM quizzes ORDER BY id DESC");
+if (isAdmin()) {
+    $quizzes = $db->fetchAll("SELECT * FROM quizzes ORDER BY id DESC");
 } else {
-    $quizzes = mysqli_query($conn, "SELECT * FROM quizzes WHERE status = 'approved' ORDER BY id DESC");
+    $quizzes = $db->fetchAll("SELECT * FROM quizzes WHERE status = 'approved' ORDER BY id DESC");
 }
 ?>
 <!DOCTYPE html>
@@ -40,8 +44,8 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
       <a href="index.php" class="nav-brand">QuizMaster</a>
       <div class="nav-links">
         <a href="leaderboard.php" class="nav-link">🏆 Leaderboard</a>
-        <?php if (isset($_SESSION['user_id']) && isset($_SESSION['username'])): ?>
-          <span class="text-sm">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>! <?php echo getTimeBasedGreeting(); ?>!</span>
+        <?php if (isLoggedIn()): ?>
+          <span class="text-sm">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>! <?php echo getTimeBasedGreeting(); ?>!</span>
           <a href="logout.php" class="btn btn-outline btn-sm">Logout</a>
         <?php else: ?>
           <a href="register.php" class="btn btn-outline btn-sm">Register</a>
@@ -59,7 +63,7 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
         <div class="card-content text-center p-6">
           <h2 class="text-2xl font-bold mb-4">Welcome to QuizMaster</h2>
           <p class="text-lg mb-6 text-muted-foreground">Test your knowledge with our interactive quizzes. Create, share, and take quizzes on various topics!</p>
-          <?php if (isset($_SESSION['user_id'])): ?>
+          <?php if (isLoggedIn()): ?>
             <div class="grid grid-cols-2 gap-4" style="max-width: 400px; margin: 0 auto;">
               <a href="create_quiz.php" class="btn btn-primary">Create Quiz</a>
               <a href="leaderboard.php" class="btn btn-secondary">View Leaderboard</a>
@@ -76,9 +80,9 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
       <!-- Quiz Listing Section -->
       <div class="mb-6">
         <h3 class="text-xl font-semibold mb-4">🎯 Available Quizzes</h3>
-        <?php if (mysqli_num_rows($quizzes) > 0) { ?>
+        <?php if (!empty($quizzes)): ?>
           <div class="grid grid-cols-3 gap-6">
-            <?php while ($q = mysqli_fetch_assoc($quizzes)) { ?>
+            <?php foreach ($quizzes as $q): ?>
               <div class="card quiz-card">
                 <div class="card-header">
                   <h4 class="card-title"><?php echo htmlspecialchars($q['title']); ?></h4>
@@ -89,7 +93,7 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
                 <div class="card-content">
                   <div class="flex items-center justify-between text-sm text-muted-foreground mb-4">
                     <span>📝 By: <?php echo htmlspecialchars($q['creator_name'] ?? 'Admin'); ?></span>
-                    <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                    <?php if (isAdmin()): ?>
                       <span class="badge <?php echo $q['status'] === 'approved' ? 'badge-default' : 'badge-secondary'; ?>">
                         <?php echo ucfirst($q['status']); ?>
                       </span>
@@ -98,22 +102,22 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
                   <a href="quiz.php?id=<?php echo $q['id']; ?>" class="btn btn-primary w-full">Take Quiz</a>
                 </div>
               </div>
-            <?php } ?>
+            <?php endforeach; ?>
           </div>
-        <?php } else { ?>
+        <?php else: ?>
           <div class="card text-center">
             <div class="card-content p-6">
               <div class="text-6xl mb-4">🎲</div>
               <h4 class="text-lg font-semibold mb-2">No quizzes available yet!</h4>
               <p class="text-muted-foreground mb-4">Be the first to create an amazing quiz for others to enjoy.</p>
-              <?php if (isset($_SESSION['user_id'])): ?>
+              <?php if (isLoggedIn()): ?>
                 <a href="create_quiz.php" class="btn btn-primary">Create First Quiz</a>
               <?php else: ?>
                 <a href="login.php" class="btn btn-primary">Login to Create Quiz</a>
               <?php endif; ?>
             </div>
           </div>
-        <?php } ?>
+        <?php endif; ?>
       </div>
 
       <!-- Features Section -->

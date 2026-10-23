@@ -1,5 +1,8 @@
 <?php
-session_start();
+require_once __DIR__ . '/security.php';
+
+initSecureSession();
+setSecurityHeaders();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -18,8 +21,8 @@ session_start();
             <div class="nav-links">
                 <a href="index.php" class="btn btn-outline">🏠 Home</a>
                 <a href="create_quiz.php" class="btn btn-secondary">📝 Create Quiz</a>
-                <?php if (isset($_SESSION['username'])): ?>
-                    <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <?php if (isLoggedIn()): ?>
+                    <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>!</span>
                     <a href="logout.php" class="btn btn-outline">🚪 Logout</a>
                 <?php else: ?>
                     <a href="login.php" class="btn btn-primary">🔑 Login</a>
@@ -162,15 +165,13 @@ session_start();
                 </div>
                 <div class="card-content">
                     <div class="max-w-md mx-auto">
-                        <form class="flex space-x-2">
-                            <input type="email" class="input flex-1" placeholder="Enter your email address" disabled>
-                            <button type="submit" class="btn btn-primary" disabled>
+                        <form class="flex space-x-2" id="notify-form">
+                            <input type="email" class="input flex-1" placeholder="Enter your email address" id="notify-email" required>
+                            <button type="submit" class="btn btn-primary">
                                 Notify Me
                             </button>
                         </form>
-                        <p class="text-xs text-muted-foreground mt-2">
-                            Email notifications coming soon! For now, check back regularly for updates.
-                        </p>
+                        <p class="text-xs text-muted-foreground mt-2" id="notify-message"></p>
                     </div>
                 </div>
             </div>
@@ -205,6 +206,38 @@ session_start();
                     card.style.animation = 'fadeInUp 0.6s ease-out forwards';
                 }, index * 100);
             });
+            
+            // Handle notify form
+            const notifyForm = document.getElementById('notify-form');
+            const notifyEmail = document.getElementById('notify-email');
+            const notifyMessage = document.getElementById('notify-message');
+            
+            if (notifyForm) {
+                notifyForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const email = notifyEmail.value.trim();
+                    
+                    if (!email || !email.includes('@')) {
+                        notifyMessage.textContent = 'Please enter a valid email address';
+                        notifyMessage.className = 'text-xs text-red-500 mt-2';
+                        return;
+                    }
+                    
+                    // In a real app, this would send to a backend API
+                    // For now, just show a success message
+                    notifyEmail.disabled = true;
+                    notifyForm.querySelector('button').disabled = true;
+                    notifyMessage.textContent = 'Thanks! We\'ll notify you when it launches.';
+                    notifyMessage.className = 'text-xs text-green-500 mt-2';
+                    
+                    // Store in localStorage for demo
+                    const emails = JSON.parse(localStorage.getItem('notify_emails') || '[]');
+                    if (!emails.includes(email)) {
+                        emails.push(email);
+                        localStorage.setItem('notify_emails', JSON.stringify(emails));
+                    }
+                });
+            }
         });
     </script>
 

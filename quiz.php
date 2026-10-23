@@ -1,29 +1,45 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
 
-// Check if user is logged in - mandatory for taking quizzes
-if (!isset($_SESSION['user_id'])) {
-    // Redirect to login with return URL
-    $current_url = urlencode($_SERVER['REQUEST_URI']);
-    header("Location: login.php?redirect=" . $current_url);
-    exit;
-}
+initSecureSession();
+setSecurityHeaders();
+
+requireLogin();
+
+$db = db();
 
 if (!isset($_GET['id'])) {
     die("Quiz ID not provided.");
 }
 
-$quiz_id = (int) $_GET['id'];  // typecast to int to avoid SQL injection
+$quiz_id = sanitizeInt($_GET['id'], 1);
 
-$result = mysqli_query($conn, "SELECT * FROM quizzes WHERE id=$quiz_id");
-$quiz = mysqli_fetch_assoc($result);
+// Use prepared statement
+$quiz = $db->fetchOne(
+    "SELECT * FROM quizzes WHERE id = ? AND status = 'approved'",
+    [$quiz_id],
+    'i'
+);
 
-if (!$quiz) {
-    die("Quiz not found! Please create a quiz first.");
+// Allow admins to see pending/rejected quizzes
+if (!$quiz && isAdmin()) {
+    $quiz = $db->fetchOne(
+        "SELECT * FROM quizzes WHERE id = ?",
+        [$quiz_id],
+        'i'
+    );
 }
 
-$questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id=$quiz_id");
+if (!$quiz) {
+    die("Quiz not found or not approved!");
+}
+
+// Fetch questions using prepared statement
+$questions = $db->fetchAll(
+    "SELECT * FROM questions WHERE quiz_id = ? ORDER BY id",
+    [$quiz_id],
+    'i'
+);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,7 +71,7 @@ $questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id=$quiz_id
         </div>
       </div>
 
-      <?php if (mysqli_num_rows($questions) == 0) { ?>
+      <?php if (empty($questions)): ?>
         <div class="card text-center">
           <div class="card-content p-6">
             <div class="text-6xl mb-4">📝</div>
@@ -64,12 +80,12 @@ $questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id=$quiz_id
             <a href="index.php" class="btn btn-secondary">Back to Home</a>
           </div>
         </div>
-      <?php } else { ?>
+      <?php else: ?>
         <!-- Quiz Questions -->
         <form method="post" action="submit.php?id=<?php echo $quiz_id; ?>" id="quizForm">
           <?php 
           $question_number = 1;
-          while ($q = mysqli_fetch_assoc($questions)) { ?>
+          foreach ($questions as $q): ?>
             <div class="card question-card mb-6">
               <div class="card-header">
                 <h3 class="card-title">Question <?php echo $question_number; ?></h3>
@@ -98,14 +114,14 @@ $questions = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id=$quiz_id
             </div>
           <?php 
           $question_number++;
-          } ?>
+          endforeach; ?>
           
           <div class="text-center">
             <button type="submit" class="btn btn-primary btn-lg">Submit Quiz</button>
             <p class="text-sm text-muted-foreground mt-2">Make sure to answer all questions before submitting</p>
           </div>
         </form>
-      <?php } ?>
+      <?php endif; ?>
     </div>
   </main>
 

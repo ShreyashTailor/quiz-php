@@ -1,34 +1,70 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
 
-$quiz_id = $_GET['id'];
-$answers = $_POST['ans'];
+initSecureSession();
+setSecurityHeaders();
+
+$db = db();
+
+$quiz_id = sanitizeInt($_GET['id'] ?? 0, 1);
+$answers = $_POST['ans'] ?? [];
 $score = 0;
 
-foreach ($answers as $qid => $ans) {
-    $q = mysqli_fetch_assoc(mysqli_query($conn, "SELECT correct_option FROM questions WHERE id=$qid"));
-    if ($q['correct_option'] == $ans) {
-        $score++;
+// Validate quiz exists and is approved (or admin)
+$quiz = $db->fetchOne(
+    "SELECT id, title FROM quizzes WHERE id = ? AND (status = 'approved' OR ? = 1)",
+    [$quiz_id, isAdmin() ? 1 : 0],
+    'ii'
+);
+
+if (!$quiz) {
+    die("Quiz not found or not accessible!");
+}
+
+// Fetch correct answers using prepared statement
+if (!empty($answers)) {
+    $questionIds = array_keys($answers);
+    $placeholders = implode(',', array_fill(0, count($questionIds), '?'));
+    
+    $correctAnswers = $db->fetchAll(
+        "SELECT id, correct_option FROM questions WHERE id IN ($placeholders)",
+        $questionIds,
+        str_repeat('i', count($questionIds))
+    );
+    
+    $correctMap = [];
+    foreach ($correctAnswers as $ca) {
+        $correctMap[$ca['id']] = $ca['correct_option'];
+    }
+    
+    foreach ($answers as $qid => $ans) {
+        if (isset($correctMap[$qid]) && $correctMap[$qid] === $ans) {
+            $score++;
+        }
     }
 }
-$total = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id=$quiz_id"));
 
-// Get quiz details
-$quiz_result = mysqli_query($conn, "SELECT title FROM quizzes WHERE id=$quiz_id");
-$quiz = mysqli_fetch_assoc($quiz_result);
+$total = $db->fetchColumn(
+    "SELECT COUNT(*) FROM questions WHERE quiz_id = ?",
+    [$quiz_id],
+    'i'
+) ?: 0;
+
+$percentage = ($total > 0) ? round(($score / $total) * 100, 2) : 0;
 
 // Save score to leaderboard if user is logged in
-if (isset($_SESSION['user_id'])) {
-    $user_id = $_SESSION['user_id'];
-    $username = $_SESSION['username'];
-    $percentage = ($total > 0) ? round(($score / $total) * 100, 2) : 0;
+if (isLoggedIn()) {
+    $user_id = getCurrentUserId();
+    $username = getCurrentUsername();
     $completion_time = date('Y-m-d H:i:s');
     
-    // Insert score into leaderboard table
-    $insert_query = "INSERT INTO leaderboard (user_id, username, quiz_id, quiz_title, score, total_questions, percentage, completion_time) 
-                     VALUES ('$user_id', '$username', '$quiz_id', '" . mysqli_real_escape_string($conn, $quiz['title']) . "', '$score', '$total', '$percentage', '$completion_time')";
-    mysqli_query($conn, $insert_query);
+    // Insert score into leaderboard table using prepared statement
+    $db->executeNonQuery(
+        "INSERT INTO leaderboard (user_id, username, quiz_id, quiz_title, score, total_questions, percentage, completion_time) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [$user_id, $username, $quiz_id, $quiz['title'], $score, $total, $percentage, $completion_time],
+        'isssiisd'
+    );
 }
 ?>
 <!DOCTYPE html>
@@ -47,8 +83,8 @@ if (isset($_SESSION['user_id'])) {
             </div>
             <div class="nav-links">
                 <a href="index.php" class="btn btn-outline">🏠 Home</a>
-                <?php if (isset($_SESSION['username'])): ?>
-                    <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <?php if (isLoggedIn()): ?>
+                    <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>!</span>
                     <a href="logout.php" class="btn btn-outline">🚪 Logout</a>
                 <?php else: ?>
                     <a href="login.php" class="btn btn-primary">🔑 Login</a>
@@ -90,31 +126,24 @@ if (isset($_SESSION['user_id'])) {
                         <!-- Performance Badge -->
                         <div class="mb-6">
                             <?php
-                            $badge_class = '';
-                            $message = '';
                             if ($percentage >= 90) {
-                                $badge_class = 'badge-default';
+                                $badge_class = 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300';
                                 $message = "🌟 Excellent! Outstanding performance!";
                             } elseif ($percentage >= 75) {
-                                $badge_class = 'badge-secondary';
+                                $badge_class = 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300';
                                 $message = "👏 Great job! Well done!";
                             } elseif ($percentage >= 60) {
-                                $badge_class = 'badge-secondary';
+                                $badge_class = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300';
                                 $message = "👍 Good work! Keep it up!";
                             } elseif ($percentage >= 40) {
-                                $badge_class = 'badge-outline';
+                                $badge_class = 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300';
                                 $message = "📚 Not bad! Keep practicing!";
                             } else {
-                                $badge_class = 'badge-outline';
+                                $badge_class = 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300';
                                 $message = "💪 Keep trying! Practice makes perfect!";
                             }
                             ?>
-                            <div class="inline-flex items-center px-4 py-2 rounded-full <?php 
-                                if ($percentage >= 90) echo 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300';
-                                elseif ($percentage >= 70) echo 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300';
-                                elseif ($percentage >= 50) echo 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300';
-                                else echo 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300';
-                            ?>">
+                            <div class="inline-flex items-center px-4 py-2 rounded-full <?php echo $badge_class; ?>">
                                 <?php echo $message; ?>
                             </div>
                         </div>
@@ -138,7 +167,7 @@ if (isset($_SESSION['user_id'])) {
 
                     <!-- Save Status -->
                     <div class="mb-8">
-                        <?php if (isset($_SESSION['user_id'])): ?>
+                        <?php if (isLoggedIn()): ?>
                             <div class="alert alert-success">
                                 <div class="flex items-center">
                                     <span class="text-lg mr-2">✅</span>
@@ -211,7 +240,7 @@ if (isset($_SESSION['user_id'])) {
                         <h3 class="text-xl font-semibold mb-2">Great Performance!</h3>
                         <p class="text-muted-foreground">You're doing really well! Keep up the excellent work.</p>
                     <?php elseif ($percentage >= 50): ?>
-                        <div class="text-4xl mb-3">�</div>
+                        <div class="text-4xl mb-3">📈</div>
                         <h3 class="text-xl font-semibold mb-2">Good Effort!</h3>
                         <p class="text-muted-foreground">You're on the right track! A bit more practice and you'll excel.</p>
                     <?php else: ?>
@@ -232,7 +261,6 @@ if (isset($_SESSION['user_id'])) {
             // Add celebration effect for high scores
             const percentage = <?php echo $percentage; ?>;
             if (percentage >= 90) {
-                // Add confetti effect or celebration animation
                 const emoji = document.querySelector('.text-6xl');
                 if (emoji) {
                     emoji.style.animation = 'bounce 2s ease-in-out infinite';

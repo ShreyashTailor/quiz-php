@@ -1,30 +1,70 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
 
-$redirect_url = isset($_GET['redirect']) ? $_GET['redirect'] : 'index.php';
+initSecureSession();
+setSecurityHeaders();
 
-if ($_POST) {
-    $username = mysqli_real_escape_string($conn, $_POST['username']);
-    $password = md5($_POST['password']);
+$db = db();
+$redirect_url = isset($_GET['redirect']) ? urldecode($_GET['redirect']) : 'index.php';
+$error_message = '';
 
-    $res = mysqli_query($conn, "SELECT * FROM users WHERE username='$username' AND password='$password'");
-    $user = mysqli_fetch_assoc($res);
-
-    if ($user) {
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['role'] = $user['role'];
-        $_SESSION['username'] = $user['username'];
-
-        if ($user['role'] == 'admin') {
-            header("Location: admin/dashboard.php");
-        } else {
-            // Redirect to the originally requested page or index
-            header("Location: " . urldecode($redirect_url));
-        }
-        exit;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Rate limiting for login attempts
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    if (!checkRateLimit("login_$ip", 5, 300)) {
+        $error_message = 'Too many login attempts. Please try again in 5 minutes.';
+        logSecurityEvent('login_rate_limit_exceeded', "IP: $ip", 'warning');
     } else {
-        $error_message = "Invalid username or password.";
+        $username = sanitizeString($_POST['username'] ?? '', 100);
+        $password = $_POST['password'] ?? '';
+        
+        if (empty($username) || empty($password)) {
+            $error_message = 'Please enter both username and password.';
+        } elseif (!validateCSRFToken($_POST[CSRF_TOKEN_NAME] ?? '')) {
+            $error_message = 'Invalid security token. Please refresh the page and try again.';
+            logSecurityEvent('csrf_validation_failed', "Login attempt", 'warning');
+        } else {
+            // Use prepared statement to prevent SQL injection
+            $user = $db->fetchOne(
+                "SELECT id, username, password, role FROM users WHERE username = ?",
+                [$username],
+                's'
+            );
+            
+            if ($user && verifyPassword($password, $user['password'])) {
+                // Check if password needs rehashing (e.g., after cost increase)
+                if (needsRehash($user['password'])) {
+                    $newHash = hashPassword($password);
+                    $db->executeNonQuery(
+                        "UPDATE users SET password = ? WHERE id = ?",
+                        [$newHash, $user['id']],
+                        'si'
+                    );
+                }
+                
+                // Regenerate session ID on successful login
+                session_regenerate_id(true);
+                
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['username'] = $user['username'];
+                
+                // Clear rate limit on successful login
+                clearRateLimit("login_$ip");
+                
+                logSecurityEvent('login_success', "User: {$user['username']}");
+                
+                if ($user['role'] === 'admin') {
+                    header("Location: admin/dashboard.php");
+                } else {
+                    header("Location: " . $redirect_url);
+                }
+                exit;
+            } else {
+                $error_message = 'Invalid username or password.';
+                logSecurityEvent('login_failed', "Username: $username", 'warning');
+            }
+        }
     }
 }
 ?>
@@ -62,19 +102,20 @@ if ($_POST) {
             <?php endif; ?>
           </div>
           <div class="card-content">
-            <?php if (isset($error_message)): ?>
+            <?php if ($error_message): ?>
               <div class="alert alert-destructive mb-4">
                 <p>❌ <?php echo htmlspecialchars($error_message); ?></p>
               </div>
             <?php endif; ?>
             <form method="post" class="space-y-4">
+              <?= csrfField() ?>
               <div class="form-group">
                 <label class="label">Username</label>
-                <input type="text" name="username" class="input" placeholder="Enter your username" required>
+                <input type="text" name="username" class="input" placeholder="Enter your username" required autocomplete="username">
               </div>
               <div class="form-group">
                 <label class="label">Password</label>
-                <input type="password" name="password" class="input" placeholder="Enter your password" required>
+                <input type="password" name="password" class="input" placeholder="Enter your password" required autocomplete="current-password">
               </div>
               <button type="submit" class="btn btn-primary w-full">Sign In</button>
             </form>
@@ -91,9 +132,8 @@ if ($_POST) {
   </main>
 
   <script src="dark-mode.js"></script>
-  <?php if (isset($_POST['username']) && !$user): ?>
+  <?php if (isset($_POST['username']) && $error_message): ?>
     <script>
-      // Show error message
       document.addEventListener('DOMContentLoaded', function() {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'alert alert-destructive';

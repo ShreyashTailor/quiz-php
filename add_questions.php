@@ -1,40 +1,74 @@
 <?php
-session_start();
-include 'db.php';
+require_once __DIR__ . '/security.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit;
-}
+initSecureSession();
+setSecurityHeaders();
 
-$quiz_id = $_GET['quiz_id'];
+requireLogin();
 
-// Get quiz details
-$quiz_result = mysqli_query($conn, "SELECT * FROM quizzes WHERE id = $quiz_id");
-$quiz = mysqli_fetch_assoc($quiz_result);
+$db = db();
 
-// Check if user owns this quiz or is admin
-if ($quiz['created_by'] != $_SESSION['user_id'] && $_SESSION['role'] !== 'admin') {
+$quiz_id = sanitizeInt($_GET['quiz_id'] ?? 0, 1);
+
+// Get quiz details using prepared statement
+$quiz = $db->fetchOne(
+    "SELECT * FROM quizzes WHERE id = ?",
+    [$quiz_id],
+    'i'
+);
+
+if (!$quiz) {
     header("Location: index.php");
     exit;
 }
 
-// Handle form submission
-if ($_POST) {
-    if (isset($_POST['question'])) {
-        // Adding a question
-        $question = mysqli_real_escape_string($conn, $_POST['question']);
-        $a = mysqli_real_escape_string($conn, $_POST['option_a']);
-        $b = mysqli_real_escape_string($conn, $_POST['option_b']);
-        $c = mysqli_real_escape_string($conn, $_POST['option_c']);
-        $d = mysqli_real_escape_string($conn, $_POST['option_d']);
-        $correct = $_POST['correct'];
+// Check if user owns this quiz or is admin
+if ($quiz['created_by'] != getCurrentUserId() && !isAdmin()) {
+    header("Location: index.php");
+    exit;
+}
 
-        mysqli_query($conn, "INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, correct_option) 
-            VALUES ('$quiz_id','$question','$a','$b','$c','$d','$correct')");
+$success_message = '';
+$error_message = '';
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        $error_message = 'Invalid security token. Please refresh the page and try again.';
+        logSecurityEvent('csrf_validation_failed', "Add questions attempt", 'warning');
+    } elseif (isset($_POST['question'])) {
+        // Adding a question
+        $question = sanitizeString($_POST['question'] ?? '', 2000);
+        $a = sanitizeString($_POST['option_a'] ?? '', 255);
+        $b = sanitizeString($_POST['option_b'] ?? '', 255);
+        $c = sanitizeString($_POST['option_c'] ?? '', 255);
+        $d = sanitizeString($_POST['option_d'] ?? '', 255);
+        $correct = sanitizeString($_POST['correct'] ?? '', 1);
+        
+        // Validate inputs
+        if (empty($question) || empty($a) || empty($b) || empty($c) || empty($d)) {
+            $error_message = 'All fields are required.';
+        } elseif (!in_array($correct, ['A', 'B', 'C', 'D'])) {
+            $error_message = 'Please select a correct answer.';
+        } elseif ($a === $b || $a === $c || $a === $d || $b === $c || $b === $d || $c === $d) {
+            $error_message = 'All options must be unique.';
+        } else {
+            // Insert question using prepared statement
+            $result = $db->executeNonQuery(
+                "INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, correct_option) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [$quiz_id, $question, $a, $b, $c, $d, $correct],
+                'issssss'
+            );
             
-        $success_message = "Question added successfully!";
+            if ($result > 0) {
+                $success_message = "Question added successfully!";
+                logSecurityEvent('question_added', "Quiz ID: $quiz_id, Question ID: " . $db->getLastInsertId());
+            } else {
+                $error_message = "Failed to add question. Please try again.";
+                logSecurityEvent('question_add_failed', "Error: " . $db->getLastError(), 'error');
+            }
+        }
     }
     
     if (isset($_POST['finish_quiz'])) {
@@ -44,9 +78,13 @@ if ($_POST) {
     }
 }
 
-// Get existing questions for this quiz
-$questions_result = mysqli_query($conn, "SELECT * FROM questions WHERE quiz_id = $quiz_id ORDER BY id");
-$question_count = mysqli_num_rows($questions_result);
+// Get existing questions for this quiz using prepared statement
+$questions = $db->fetchAll(
+    "SELECT * FROM questions WHERE quiz_id = ? ORDER BY id",
+    [$quiz_id],
+    'i'
+);
+$question_count = count($questions);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -64,7 +102,7 @@ $question_count = mysqli_num_rows($questions_result);
             </div>
             <div class="nav-links">
                 <a href="index.php" class="btn btn-outline">🏠 Home</a>
-                <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
+                <span class="text-muted-foreground">Hello, <?php echo htmlspecialchars(getCurrentUsername()); ?>!</span>
                 <a href="logout.php" class="btn btn-outline">🚪 Logout</a>
                 <button id="theme-toggle" class="btn btn-outline" aria-label="Toggle theme">🌙</button>
             </div>
@@ -97,11 +135,20 @@ $question_count = mysqli_num_rows($questions_result);
                 </div>
             </div>
 
-            <?php if (isset($success_message)): ?>
+            <?php if ($success_message): ?>
                 <div class="alert alert-success mb-6">
                     <div class="flex items-center">
                         <span class="text-lg mr-2">✅</span>
-                        <span><?php echo $success_message; ?></span>
+                        <span><?php echo htmlspecialchars($success_message); ?></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($error_message): ?>
+                <div class="alert alert-destructive mb-6">
+                    <div class="flex items-center">
+                        <span class="text-lg mr-2">❌</span>
+                        <span><?php echo htmlspecialchars($error_message); ?></span>
                     </div>
                 </div>
             <?php endif; ?>
@@ -114,32 +161,34 @@ $question_count = mysqli_num_rows($questions_result);
                 </div>
                 <div class="card-content">
                     <form method="post" class="space-y-6">
+                        <?= csrfField() ?>
                         <div class="form-group">
                             <label class="label">Question</label>
                             <textarea name="question" class="textarea" rows="3" required 
-                                      placeholder="Enter your question here..."></textarea>
+                                      placeholder="Enter your question here..."
+                                      maxlength="2000" minlength="5"></textarea>
                         </div>
                         
                         <div class="grid grid-cols-2 gap-4">
                             <div class="form-group">
                                 <label class="label">Option A</label>
                                 <input type="text" name="option_a" class="input" required 
-                                       placeholder="Enter option A">
+                                       placeholder="Enter option A" maxlength="255" minlength="1">
                             </div>
                             <div class="form-group">
                                 <label class="label">Option B</label>
                                 <input type="text" name="option_b" class="input" required 
-                                       placeholder="Enter option B">
+                                       placeholder="Enter option B" maxlength="255" minlength="1">
                             </div>
                             <div class="form-group">
                                 <label class="label">Option C</label>
                                 <input type="text" name="option_c" class="input" required 
-                                       placeholder="Enter option C">
+                                       placeholder="Enter option C" maxlength="255" minlength="1">
                             </div>
                             <div class="form-group">
                                 <label class="label">Option D</label>
                                 <input type="text" name="option_d" class="input" required 
-                                       placeholder="Enter option D">
+                                       placeholder="Enter option D" maxlength="255" minlength="1">
                             </div>
                         </div>
                         
@@ -163,46 +212,45 @@ $question_count = mysqli_num_rows($questions_result);
 
             <!-- Existing Questions Preview -->
             <?php if ($question_count > 0): ?>
-                <div class="card mb-8">
-                    <div class="card-header">
-                        <h3 class="card-title">📋 Questions Added</h3>
-                        <p class="card-description"><?php echo $question_count; ?> question(s) created so far</p>
-                    </div>
-                    <div class="card-content">
-                        <div class="space-y-6">
-                            <?php 
-                            $q_num = 1;
-                            mysqli_data_seek($questions_result, 0);
-                            while ($q = mysqli_fetch_assoc($questions_result)): 
-                            ?>
-                                <div class="border rounded-lg p-4">
-                                    <h4 class="font-semibold mb-3">Q<?php echo $q_num; ?>: <?php echo htmlspecialchars($q['question']); ?></h4>
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'A') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
-                                            <span class="font-medium">A)</span> <?php echo htmlspecialchars($q['option_a']); ?>
-                                            <?php if ($q['correct_option'] === 'A'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
-                                        </div>
-                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'B') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
-                                            <span class="font-medium">B)</span> <?php echo htmlspecialchars($q['option_b']); ?>
-                                            <?php if ($q['correct_option'] === 'B'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
-                                        </div>
-                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'C') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
-                                            <span class="font-medium">C)</span> <?php echo htmlspecialchars($q['option_c']); ?>
-                                            <?php if ($q['correct_option'] === 'C'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
-                                        </div>
-                                        <div class="p-2 rounded <?php echo ($q['correct_option'] === 'D') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
-                                            <span class="font-medium">D)</span> <?php echo htmlspecialchars($q['option_d']); ?>
-                                            <?php if ($q['correct_option'] === 'D'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
-                                        </div>
+            <div class="card mb-8">
+                <div class="card-header">
+                    <h3 class="card-title">📋 Questions Added</h3>
+                    <p class="card-description"><?php echo $question_count; ?> question(s) created so far</p>
+                </div>
+                <div class="card-content">
+                    <div class="space-y-6">
+                        <?php 
+                        $q_num = 1;
+                        foreach ($questions as $q): 
+                        ?>
+                            <div class="border rounded-lg p-4">
+                                <h4 class="font-semibold mb-3">Q<?php echo $q_num; ?>: <?php echo htmlspecialchars($q['question']); ?></h4>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="p-2 rounded <?php echo ($q['correct_option'] === 'A') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                        <span class="font-medium">A)</span> <?php echo htmlspecialchars($q['option_a']); ?>
+                                        <?php if ($q['correct_option'] === 'A'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
+                                    </div>
+                                    <div class="p-2 rounded <?php echo ($q['correct_option'] === 'B') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                        <span class="font-medium">B)</span> <?php echo htmlspecialchars($q['option_b']); ?>
+                                        <?php if ($q['correct_option'] === 'B'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
+                                    </div>
+                                    <div class="p-2 rounded <?php echo ($q['correct_option'] === 'C') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                        <span class="font-medium">C)</span> <?php echo htmlspecialchars($q['option_c']); ?>
+                                        <?php if ($q['correct_option'] === 'C'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
+                                    </div>
+                                    <div class="p-2 rounded <?php echo ($q['correct_option'] === 'D') ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'; ?>">
+                                        <span class="font-medium">D)</span> <?php echo htmlspecialchars($q['option_d']); ?>
+                                        <?php if ($q['correct_option'] === 'D'): ?><span class="text-green-600 ml-2">✓</span><?php endif; ?>
                                     </div>
                                 </div>
-                            <?php 
-                            $q_num++;
-                            endwhile; 
-                            ?>
-                        </div>
+                            </div>
+                        <?php 
+                        $q_num++;
+                        endforeach; 
+                        ?>
                     </div>
                 </div>
+            </div>
             <?php endif; ?>
 
             <!-- Action Buttons -->
@@ -211,6 +259,7 @@ $question_count = mysqli_num_rows($questions_result);
                     <div class="flex flex-col space-y-4">
                         <?php if ($question_count >= 1): ?>
                             <form method="post">
+                                <?= csrfField() ?>
                                 <button type="submit" name="finish_quiz" class="btn btn-primary w-full">
                                     ✅ Finish Quiz Creation
                                 </button>

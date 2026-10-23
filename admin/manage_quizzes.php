@@ -1,53 +1,97 @@
 <?php
-session_start();
-include '../db.php';
+require_once __DIR__ . '/../security.php';
 
-// Check if user is admin
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../login.php");
-    exit;
-}
+initSecureSession();
+setSecurityHeaders();
 
+requireAdmin('../login.php');
+
+$db = db();
 $success_message = '';
 $error_message = '';
 
 // Handle quiz actions
-if ($_POST) {
-    if (isset($_POST['delete_quiz'])) {
-        $quiz_id = (int)$_POST['quiz_id'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        $error_message = 'Invalid security token. Please refresh the page and try again.';
+        logSecurityEvent('csrf_validation_failed', "Admin quiz action", 'warning');
+    } elseif (isset($_POST['delete_quiz'])) {
+        $quiz_id = sanitizeInt($_POST['quiz_id'] ?? 0, 1);
         
-        // Delete questions first (foreign key constraint)
-        mysqli_query($conn, "DELETE FROM questions WHERE quiz_id = $quiz_id");
-        // Delete leaderboard entries
-        mysqli_query($conn, "DELETE FROM leaderboard WHERE quiz_id = $quiz_id");
-        // Delete quiz
-        mysqli_query($conn, "DELETE FROM quizzes WHERE id = $quiz_id");
+        try {
+            $db->beginTransaction();
+            
+            // Delete questions first (foreign key constraint)
+            $db->executeNonQuery(
+                "DELETE FROM questions WHERE quiz_id = ?",
+                [$quiz_id],
+                'i'
+            );
+            
+            // Delete leaderboard entries
+            $db->executeNonQuery(
+                "DELETE FROM leaderboard WHERE quiz_id = ?",
+                [$quiz_id],
+                'i'
+            );
+            
+            // Delete quiz
+            $result = $db->executeNonQuery(
+                "DELETE FROM quizzes WHERE id = ?",
+                [$quiz_id],
+                'i'
+            );
+            
+            if ($result > 0) {
+                $db->commit();
+                $success_message = "Quiz deleted successfully!";
+                logSecurityEvent('quiz_deleted', "Quiz ID: $quiz_id, Admin: " . getCurrentUsername());
+            } else {
+                $db->rollback();
+                $error_message = "Quiz not found or already deleted.";
+            }
+        } catch (Exception $e) {
+            $db->rollback();
+            $error_message = "Error deleting quiz: " . $e->getMessage();
+            logSecurityEvent('quiz_delete_error', "Error: " . $e->getMessage(), 'error');
+        }
+    } elseif (isset($_POST['change_status'])) {
+        $quiz_id = sanitizeInt($_POST['quiz_id'] ?? 0, 1);
+        $new_status = sanitizeString($_POST['new_status'] ?? '', 20);
         
-        $success_message = "Quiz deleted successfully!";
-    }
-    
-    if (isset($_POST['change_status'])) {
-        $quiz_id = (int)$_POST['quiz_id'];
-        $new_status = mysqli_real_escape_string($conn, $_POST['new_status']);
-        
-        mysqli_query($conn, "UPDATE quizzes SET 
-                            status = '$new_status',
-                            approved_by = {$_SESSION['user_id']},
-                            approved_at = NOW()
-                            WHERE id = $quiz_id");
-        
-        $success_message = "Quiz status updated to " . ucfirst($new_status) . "!";
+        $valid_statuses = ['pending', 'approved', 'rejected'];
+        if (!in_array($new_status, $valid_statuses)) {
+            $error_message = "Invalid status.";
+        } else {
+            $result = $db->executeNonQuery(
+                "UPDATE quizzes SET 
+                 status = ?,
+                 approved_by = ?,
+                 approved_at = NOW()
+                 WHERE id = ?",
+                [$new_status, getCurrentUserId(), $quiz_id],
+                'sii'
+            );
+            
+            if ($result > 0) {
+                $success_message = "Quiz status updated to " . ucfirst($new_status) . "!";
+                logSecurityEvent('quiz_status_changed', "Quiz ID: $quiz_id, New Status: $new_status, Admin: " . getCurrentUsername());
+            } else {
+                $error_message = "Failed to update quiz status.";
+            }
+        }
     }
 }
 
-// Get all quizzes with question count
-$quizzes_query = "SELECT q.*, COUNT(qs.id) as question_count,
-                  (SELECT COUNT(*) FROM leaderboard l WHERE l.quiz_id = q.id) as attempt_count
-                  FROM quizzes q 
-                  LEFT JOIN questions qs ON q.id = qs.quiz_id 
-                  GROUP BY q.id 
-                  ORDER BY q.created_at DESC";
-$quizzes_result = mysqli_query($conn, $quizzes_query);
+// Get all quizzes with question count using prepared statement
+$quizzes = $db->fetchAll(
+    "SELECT q.*, COUNT(qs.id) as question_count,
+     (SELECT COUNT(*) FROM leaderboard l WHERE l.quiz_id = q.id) as attempt_count
+     FROM quizzes q 
+     LEFT JOIN questions qs ON q.id = qs.quiz_id 
+     GROUP BY q.id 
+     ORDER BY q.created_at DESC"
+);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -84,7 +128,7 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                 <div class="alert alert-success mb-6">
                     <div class="flex items-center">
                         <span class="text-lg mr-2">✅</span>
-                        <span><?php echo $success_message; ?></span>
+                        <span><?php echo htmlspecialchars($success_message); ?></span>
                     </div>
                 </div>
             <?php endif; ?>
@@ -93,7 +137,7 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                 <div class="alert alert-destructive mb-6">
                     <div class="flex items-center">
                         <span class="text-lg mr-2">❌</span>
-                        <span><?php echo $error_message; ?></span>
+                        <span><?php echo htmlspecialchars($error_message); ?></span>
                     </div>
                 </div>
             <?php endif; ?>
@@ -132,7 +176,7 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                     <p class="card-description">Complete list of quizzes with management options</p>
                 </div>
                 <div class="card-content">
-                    <?php if (mysqli_num_rows($quizzes_result) > 0): ?>
+                    <?php if (!empty($quizzes)): ?>
                         <div class="overflow-x-auto">
                             <table class="w-full">
                                 <thead>
@@ -147,13 +191,13 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php while ($quiz = mysqli_fetch_assoc($quizzes_result)): ?>
+                                    <?php foreach ($quizzes as $quiz): ?>
                                         <tr class="border-b hover:bg-muted/50">
                                             <td class="p-4">
                                                 <div>
                                                     <h4 class="font-semibold"><?php echo htmlspecialchars($quiz['title']); ?></h4>
                                                     <p class="text-sm text-muted-foreground line-clamp-2">
-                                                        <?php echo htmlspecialchars(substr($quiz['description'], 0, 100)); ?>...
+                                                        <?php echo htmlspecialchars(substr($quiz['description'] ?? '', 0, 100)); ?>...
                                                     </p>
                                                 </div>
                                             </td>
@@ -207,20 +251,23 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                                                         <div id="status-menu-<?php echo $quiz['id']; ?>" 
                                                              class="absolute right-0 mt-1 w-32 bg-background border rounded-lg shadow-lg hidden z-10">
                                                             <form method="post">
+                                                                <?= csrfField() ?>
                                                                 <input type="hidden" name="quiz_id" value="<?php echo $quiz['id']; ?>">
                                                                 <button type="submit" name="change_status" value="approved" 
-                                                                        class="w-full text-left px-3 py-2 hover:bg-muted text-sm">
+                                                                        class="w-full text-left px-3 py-2 hover:bg-muted text-sm"
+                                                                        onclick="return confirm('Approve this quiz?')">
                                                                     ✅ Approve
                                                                 </button>
                                                                 <button type="submit" name="change_status" value="pending" 
-                                                                        class="w-full text-left px-3 py-2 hover:bg-muted text-sm">
+                                                                        class="w-full text-left px-3 py-2 hover:bg-muted text-sm"
+                                                                        onclick="return confirm('Set this quiz to pending?')">
                                                                     ⏳ Pending
                                                                 </button>
                                                                 <button type="submit" name="change_status" value="rejected" 
-                                                                        class="w-full text-left px-3 py-2 hover:bg-muted text-sm">
+                                                                        class="w-full text-left px-3 py-2 hover:bg-muted text-sm"
+                                                                        onclick="return confirm('Reject this quiz?')">
                                                                     ❌ Reject
                                                                 </button>
-                                                                <input type="hidden" name="new_status" value="">
                                                             </form>
                                                         </div>
                                                     </div>
@@ -228,6 +275,7 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                                                     <!-- Delete Quiz -->
                                                     <form method="post" style="display: inline;" 
                                                           onsubmit="return confirm('Are you sure you want to delete this quiz? This action cannot be undone.')">
+                                                        <?= csrfField() ?>
                                                         <input type="hidden" name="quiz_id" value="<?php echo $quiz['id']; ?>">
                                                         <button type="submit" name="delete_quiz" 
                                                                 class="btn btn-destructive btn-sm" title="Delete Quiz">
@@ -237,7 +285,7 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                                                 </div>
                                             </td>
                                         </tr>
-                                    <?php endwhile; ?>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -278,15 +326,6 @@ $quizzes_result = mysqli_query($conn, $quizzes_query);
                     menu.classList.add('hidden');
                 });
             }
-        });
-
-        // Set the new_status value when submitting
-        document.querySelectorAll('button[name="change_status"]').forEach(button => {
-            button.addEventListener('click', function() {
-                const form = this.form;
-                const newStatusInput = form.querySelector('input[name="new_status"]');
-                newStatusInput.value = this.value;
-            });
         });
 
         document.addEventListener('DOMContentLoaded', function() {

@@ -1,0 +1,65 @@
+# QuizMaster .gitignore
+
+# Environment files (contains secrets)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Composer
+vendor/
+composer.lock
+
+# PHPUnit
+.phpunit.result.cache
+
+# PHPStan
+.phpstan/
+
+# Coverage reports
+coverage/
+*.coverage
+
+# Docker
+docker-compose.override.yml
+
+# Backup files
+*.bak
+*.backup
+*_backup.php
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+
+# Database
+*.sql
+*.sqlite
+*.db
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+dist/
+build/
