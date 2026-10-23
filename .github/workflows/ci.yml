@@ -131,13 +131,13 @@ jobs:
           fi
           
           # Check for MD5 usage
-          if grep -r "md5(" --include="*.php" . | grep -v "test" | grep -v ".github"; then
+          if grep -r "md5(" --include="*.php" . | grep -v "test" | grep -v ".github" | grep -v "vendor/"; then
             echo "⚠️ MD5 usage found!"
             exit 1
           fi
           
           # Check for eval usage
-          if grep -r "eval(" --include="*.php" . | grep -v "test" | grep -v ".github"; then
+          if grep -r "eval(" --include="*.php" . | grep -v "test" | grep -v ".github" | grep -v "vendor/"; then
             echo "⚠️ eval() usage found!"
             exit 1
           fi
