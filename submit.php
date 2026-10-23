@@ -24,12 +24,12 @@ if (!$quiz) {
 // Fetch correct answers using prepared statement
 if (!empty($answers)) {
     $questionIds = array_keys($answers);
-    $placeholders = implode(',', array_fill(0, count($questionIds), '?'));
+    $inClause = $db->buildInClause($questionIds);
     
     $correctAnswers = $db->fetchAll(
-        "SELECT id, correct_option FROM questions WHERE id IN ($placeholders)",
-        $questionIds,
-        str_repeat('i', count($questionIds))
+        "SELECT id, correct_option FROM questions WHERE id IN (" . $inClause['sql'] . ")",
+        $inClause['params'],
+        $inClause['types']
     );
     
     $correctMap = [];

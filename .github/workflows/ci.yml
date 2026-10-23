@@ -25,10 +25,10 @@ jobs:
             \$result = match(1) { 1 => 'one', default => 'other' };
             echo 'Match expression: ' . \$result . PHP_EOL;
             
-            // Readonly properties
-            class Test { public readonly string \$name = 'test'; }
-            \$t = new Test();
-            echo 'Readonly property: ' . \$t->name . PHP_EOL;
+            // Readonly properties (cannot have default values in PHP 8.3+)
+            class Test { public readonly string $name; public function __construct(string $name) { $this->name = $name; } }
+            $t = new Test('test');
+            echo 'Readonly property: ' . $t->name . PHP_EOL;
             
             // #[Attribute]
             #[Attribute]

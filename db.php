@@ -184,6 +184,27 @@ class Database {
     // Prevent cloning
     private function __clone() {}
     public function __wakeup() {}
+
+    /**
+     * Build an IN clause with placeholders for prepared statements
+     * 
+     * @param array $values Array of values for IN clause
+     * @return array ['sql' => string, 'params' => array, 'types' => string]
+     */
+    public function buildInClause(array $values): array {
+        if (empty($values)) {
+            return ['sql' => 'FALSE', 'params' => [], 'types' => ''];
+        }
+        $placeholders = implode(',', array_fill(0, count($values), '?'));
+        $types = '';
+        foreach ($values as $value) {
+            if (is_int($value)) $types .= 'i';
+            elseif (is_double($value)) $types .= 'd';
+            elseif (is_string($value)) $types .= 's';
+            else $types .= 'b';
+        }
+        return ['sql' => $placeholders, 'params' => $values, 'types' => $types];
+    }
 }
 
 // Backward compatibility: provide $conn variable for existing code

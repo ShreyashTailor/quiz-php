@@ -15,12 +15,12 @@ $sort_by = sanitizeString($_GET['sort'] ?? 'percentage', 50);
 $order = sanitizeString($_GET['order'] ?? 'DESC', 4);
 
 // Build query based on filters using prepared statements
-$where_clause = "";
+$where_sql = "";
 $params = [];
 $types = '';
 
 if ($quiz_filter !== 'all') {
-    $where_clause = "WHERE quiz_id = ?";
+    $where_sql = "WHERE quiz_id = ?";
     $params[] = $quiz_filter;
     $types .= 'i';
 }
@@ -30,9 +30,12 @@ $valid_sorts = ['percentage', 'score', 'completion_time', 'username'];
 $sort_by = in_array($sort_by, $valid_sorts) ? $sort_by : 'percentage';
 $order = ($order === 'ASC') ? 'ASC' : 'DESC';
 
+// Build the complete query with validated ORDER BY
+$order_by_sql = "ORDER BY " . $sort_by . " " . $order . ", completion_time DESC";
+
 // Get leaderboard data using prepared statement
 $leaderboard = $db->fetchAll(
-    "SELECT * FROM leaderboard $where_clause ORDER BY $sort_by $order, completion_time DESC",
+    "SELECT * FROM leaderboard " . $where_sql . " " . $order_by_sql,
     $params,
     $types
 );
@@ -45,7 +48,7 @@ $stats = $db->fetchOne(
         COUNT(DISTINCT quiz_id) as unique_quizzes,
         AVG(percentage) as avg_score,
         MAX(percentage) as highest_score
-     FROM leaderboard $where_clause",
+     FROM leaderboard " . $where_sql,
     $params,
     $types
 ) ?: [

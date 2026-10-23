@@ -89,7 +89,9 @@ try {
     
     // Find users with MD5 hashes (32 character hex strings)
     $md5Users = $db->fetchAll(
-        "SELECT id, username, password FROM users WHERE LENGTH(password) = 32 AND password NOT LIKE '\$2y\$%'"
+        "SELECT id, username, password FROM users WHERE LENGTH(password) = 32 AND password NOT LIKE ?",
+        ['$2y$%'],
+        's'
     );
     
     if (!empty($md5Users)) {
